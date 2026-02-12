@@ -369,37 +369,51 @@ func promptValue(ctx context.Context, label string, defaultValue string) (string
 }
 
 func promptAudience(ctx context.Context, defaultAudience string) (string, error) {
-	for {
-		value, err := promptValue(ctx, "Audience (consumer|enterprise)", defaultAudience)
-		if err != nil {
-			return "", err
-		}
-		value = strings.ToLower(strings.TrimSpace(value))
-		switch value {
-		case profile.AudienceConsumer, profile.AudienceEnterprise:
-			return value, nil
-		default:
-			printWizardMessage(ctx, "Audience must be consumer or enterprise")
-		}
+	value := strings.ToLower(strings.TrimSpace(defaultAudience))
+	switch value {
+	case profile.AudienceConsumer, profile.AudienceEnterprise:
+	default:
+		value = profile.AudienceConsumer
 	}
+
+	selected, err := input.SelectString(ctx, input.SelectStringConfig{
+		Title:       "Audience",
+		Description: "Pick the audience that matches your app registration.",
+		Default:     value,
+		Options: []input.SelectStringOption{
+			{Label: "consumer (personal Microsoft accounts)", Value: profile.AudienceConsumer},
+			{Label: "enterprise (work/school accounts)", Value: profile.AudienceEnterprise},
+		},
+	})
+	if err != nil {
+		return "", wrapPromptInputErr("select audience", err)
+	}
+	return selected, nil
 }
 
 func promptMode(ctx context.Context, defaultMode string) (string, error) {
-	for {
-		value, err := promptValue(ctx, "Mode (delegated|app-only)", defaultMode)
-		if err != nil {
-			return "", err
-		}
-		value = strings.ToLower(strings.TrimSpace(value))
-		switch value {
-		case "delegated":
-			return profile.AuthModeDelegated, nil
-		case "app-only", "app_only":
-			return profile.AuthModeAppOnly, nil
-		default:
-			printWizardMessage(ctx, "Mode must be delegated or app-only")
-		}
+	value := strings.ToLower(strings.TrimSpace(defaultMode))
+	switch value {
+	case profile.AuthModeDelegated:
+	case "app-only", profile.AuthModeAppOnly:
+		value = profile.AuthModeAppOnly
+	default:
+		value = profile.AuthModeDelegated
 	}
+
+	selected, err := input.SelectString(ctx, input.SelectStringConfig{
+		Title:       "Auth mode",
+		Description: "Choose delegated user sign-in or app-only service auth.",
+		Default:     value,
+		Options: []input.SelectStringOption{
+			{Label: "delegated (device code user sign-in)", Value: profile.AuthModeDelegated},
+			{Label: "app-only (service auth with client secret)", Value: profile.AuthModeAppOnly},
+		},
+	})
+	if err != nil {
+		return "", wrapPromptInputErr("select auth mode", err)
+	}
+	return selected, nil
 }
 
 func wizardAuthorityDefault(existing config.ProfileRecord, selectedAudience string, selectedTenant string) string {
@@ -421,22 +435,36 @@ func promptDelegatedWorkloads(ctx context.Context, theme authWizardTheme, defaul
 	defaultDisplay := strings.Join(defaults, ",")
 	printWizardMessage(ctx, renderWorkloadGuide(theme, defaultDisplay))
 
-	for {
-		value, err := promptValue(ctx, "Scope workloads (comma-separated)", defaultDisplay)
-		if err != nil {
-			return nil, err
-		}
-		if strings.TrimSpace(value) == "" {
-			printWizardMessage(ctx, "At least one delegated workload is required")
-			continue
-		}
-		workloads, parseErr := auth.ParseScopeWorkloadsCSV(value)
-		if parseErr != nil {
-			printWizardMessage(ctx, parseErr.Error())
-			continue
-		}
-		return workloads, nil
+	workloadOptions := []input.SelectStringOption{
+		{Label: "mail (Mail.Read, Mail.Send)", Value: "mail"},
+		{Label: "calendar (Calendars.Read, Calendars.ReadWrite)", Value: "calendar"},
+		{Label: "contacts (Contacts.Read, Contacts.ReadWrite)", Value: "contacts"},
+		{Label: "tasks (Tasks.Read, Tasks.ReadWrite)", Value: "tasks"},
+		{Label: "onedrive (Files.Read, Files.ReadWrite)", Value: "onedrive"},
+		{Label: "groups (Group.Read.All, GroupMember.Read.All)", Value: "groups"},
 	}
+
+	selected, err := input.MultiSelectStrings(ctx, input.MultiSelectStringConfig{
+		Title:       "Delegated workload groups",
+		Description: "Use space to toggle selections, then press enter to continue.",
+		Defaults:    defaults,
+		Options:     workloadOptions,
+		Validate: func(values []string) error {
+			if len(values) == 0 {
+				return errors.New("at least one delegated workload is required")
+			}
+			return nil
+		},
+	})
+	if err != nil {
+		return nil, wrapPromptInputErr("select delegated workloads", err)
+	}
+
+	workloads, normalizeErr := auth.NormalizeScopeWorkloads(selected)
+	if normalizeErr != nil {
+		return nil, normalizeErr
+	}
+	return workloads, nil
 }
 
 func promptAppOnlySecretInputs(ctx context.Context, theme authWizardTheme) (string, string, error) {
@@ -615,7 +643,8 @@ func renderWorkloadGuide(theme authWizardTheme, defaultDisplay string) string {
 	lines := []string{
 		theme.step("Step 5: Delegated workload groups"),
 		"  Select one or more workload groups. mog requests minimal per-command scopes later.",
-		"  Valid values (comma-separated):",
+		"  Use space to toggle options, then press Enter to continue.",
+		"  Available selections:",
 		"    " + theme.key("mail") + "      Outlook mail list/get/send",
 		"              permissions: Mail.Read, Mail.Send",
 		"    " + theme.key("calendar") + "  Outlook calendar list/get/create/update/delete",
@@ -664,6 +693,13 @@ func printWizardMessage(ctx context.Context, message string) {
 		return
 	}
 	_, _ = fmt.Fprintln(os.Stderr, message)
+}
+
+func wrapPromptInputErr(action string, err error) error {
+	if errors.Is(err, io.EOF) {
+		return &ExitError{Code: 1, Err: errors.New("cancelled")}
+	}
+	return fmt.Errorf("%s: %w", action, err)
 }
 
 type AuthLogoutCmd struct {
