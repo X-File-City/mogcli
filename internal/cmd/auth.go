@@ -784,6 +784,10 @@ func (c *AuthAccountsCmd) Run(ctx context.Context) error {
 	if outfmt.IsJSON(ctx) {
 		return outfmt.WriteJSON(os.Stdout, map[string]any{"profiles": profiles})
 	}
+	if len(profiles) == 0 {
+		fmt.Fprintln(os.Stdout, "No profiles configured. Run `mog auth` to get started.")
+		return nil
+	}
 
 	w, done := tableWriter(ctx)
 	defer done()

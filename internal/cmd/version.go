@@ -20,16 +20,22 @@ func VersionString() string {
 	if v == "" {
 		v = "dev"
 	}
-	if strings.TrimSpace(commit) == "" && strings.TrimSpace(date) == "" {
-		return v
+	c := strings.TrimSpace(commit)
+	if len(c) > 7 {
+		c = c[:7]
 	}
-	if strings.TrimSpace(commit) == "" {
-		return fmt.Sprintf("%s (%s)", v, strings.TrimSpace(date))
+	d := strings.TrimSpace(date)
+
+	if c == "" && d == "" {
+		return fmt.Sprintf("mog version %s", v)
 	}
-	if strings.TrimSpace(date) == "" {
-		return fmt.Sprintf("%s (%s)", v, strings.TrimSpace(commit))
+	if c == "" {
+		return fmt.Sprintf("mog version %s (%s)", v, d)
 	}
-	return fmt.Sprintf("%s (%s %s)", v, strings.TrimSpace(commit), strings.TrimSpace(date))
+	if d == "" {
+		return fmt.Sprintf("mog version %s (%s)", v, c)
+	}
+	return fmt.Sprintf("mog version %s (%s %s)", v, c, d)
 }
 
 type VersionCmd struct{}

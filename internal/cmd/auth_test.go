@@ -253,6 +253,22 @@ func TestAuthLoginAppOnlyPersistsDefaultUser(t *testing.T) {
 	}
 }
 
+func TestAuthAccountsEmptyState(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	stdout, stderr, err := captureExecuteOutput(t, []string{"auth", "accounts"})
+	if err != nil {
+		t.Fatalf("Execute(auth accounts) failed: %v\nstderr:\n%s", err, stderr)
+	}
+	if strings.TrimSpace(stderr) != "" {
+		t.Fatalf("expected no stderr, got:\n%s", stderr)
+	}
+	if !strings.Contains(stdout, "No profiles configured. Run `mog auth` to get started.") {
+		t.Fatalf("expected empty-state guidance, got:\n%s", stdout)
+	}
+}
+
 func TestWizardAuthorityDefault(t *testing.T) {
 	t.Parallel()
 

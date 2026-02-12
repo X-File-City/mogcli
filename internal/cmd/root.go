@@ -10,37 +10,35 @@ import (
 	"github.com/alecthomas/kong"
 
 	"github.com/jaredpalmer/mogcli/internal/authclient"
-	"github.com/jaredpalmer/mogcli/internal/config"
 	"github.com/jaredpalmer/mogcli/internal/errfmt"
 	"github.com/jaredpalmer/mogcli/internal/outfmt"
-	"github.com/jaredpalmer/mogcli/internal/secrets"
 	"github.com/jaredpalmer/mogcli/internal/ui"
 )
 
 type RootFlags struct {
-	Profile        string `name:"use-profile" help:"Profile name override for API commands" default:"${profile}"`
-	Client         string `help:"Logical client registration name" default:"${client}"`
-	EnableCommands string `help:"Comma-separated list of enabled top-level commands (restricts CLI)" default:"${enabled_commands}"`
-	JSON           bool   `help:"Output JSON to stdout (best for scripting)" default:"${json}"`
-	Plain          bool   `help:"Output stable, parseable text to stdout (TSV)" default:"${plain}"`
-	Force          bool   `help:"Skip confirmations for destructive commands"`
-	NoInput        bool   `help:"Never prompt; fail instead (useful for CI)"`
-	Verbose        bool   `help:"Enable verbose logging"`
+	Profile        string `name:"use-profile" group:"inherited-flags" help:"Profile name override for API commands" default:"${profile}"`
+	Client         string `group:"inherited-flags" help:"Logical client registration name" default:"${client}"`
+	EnableCommands string `group:"inherited-flags" help:"Comma-separated list of enabled top-level commands (restricts CLI)" default:"${enabled_commands}"`
+	JSON           bool   `group:"inherited-flags" help:"Output JSON to stdout (best for scripting)" default:"${json}"`
+	Plain          bool   `group:"inherited-flags" help:"Output stable, parseable text to stdout (TSV)" default:"${plain}"`
+	Force          bool   `group:"inherited-flags" help:"Skip confirmations for destructive commands"`
+	NoInput        bool   `group:"inherited-flags" help:"Never prompt; fail instead (useful for CI)"`
+	Verbose        bool   `group:"inherited-flags" help:"Enable verbose logging"`
 }
 
 type CLI struct {
 	RootFlags `embed:""`
 
-	Version kong.VersionFlag `help:"Print version and exit"`
+	Version kong.VersionFlag `group:"inherited-flags" help:"Print version and exit"`
 
-	Auth       AuthCmd               `cmd:"" help:"Authentication and profiles"`
-	Mail       MailCmd               `cmd:"" aliases:"email" help:"Outlook Mail"`
-	Calendar   CalendarCmd           `cmd:"" help:"Outlook Calendar"`
-	Contacts   ContactsCmd           `cmd:"" help:"Outlook Contacts"`
-	Groups     GroupsCmd             `cmd:"" help:"Microsoft 365 Groups"`
-	Tasks      TasksCmd              `cmd:"" help:"Microsoft To Do tasks"`
-	OneDrive   OneDriveCmd           `cmd:"" name:"onedrive" help:"OneDrive"`
-	Config     ConfigCmd             `cmd:"" help:"Manage configuration"`
+	Auth       AuthCmd               `cmd:"" help:"Authenticate and manage profiles"`
+	Mail       MailCmd               `cmd:"" aliases:"email" help:"Read and send Outlook mail"`
+	Calendar   CalendarCmd           `cmd:"" help:"Manage Outlook calendar events"`
+	Contacts   ContactsCmd           `cmd:"" help:"Manage Outlook contacts"`
+	Groups     GroupsCmd             `cmd:"" help:"Manage Microsoft 365 Groups (enterprise only)"`
+	Tasks      TasksCmd              `cmd:"" help:"Manage Microsoft To Do tasks"`
+	OneDrive   OneDriveCmd           `cmd:"" name:"onedrive" help:"Manage OneDrive files and folders"`
+	Config     ConfigCmd             `cmd:"" help:"View and manage configuration"`
 	VersionCmd VersionCmd            `cmd:"" name:"version" help:"Print version"`
 	Completion CompletionCmd         `cmd:"" help:"Generate shell completion scripts"`
 	Complete   CompletionInternalCmd `cmd:"" name:"__complete" hidden:"" help:"Internal completion helper"`
@@ -52,6 +50,9 @@ func Execute(args []string) (err error) {
 	parser, cli, err := newParser(helpDescription())
 	if err != nil {
 		return err
+	}
+	if len(args) == 0 {
+		args = []string{"--help"}
 	}
 
 	defer func() {
@@ -161,6 +162,7 @@ func newParser(description string) (*kong.Kong, *CLI, error) {
 		kong.ConfigureHelp(helpOptions()),
 		kong.Help(helpPrinter),
 		kong.Vars(vars),
+		kong.Groups{"inherited-flags": "Inherited Flags:"},
 		kong.Writers(os.Stdout, os.Stderr),
 		kong.Exit(func(code int) { panic(exitPanic{code: code}) }),
 	)
@@ -176,25 +178,7 @@ func baseDescription() string {
 }
 
 func helpDescription() string {
-	desc := baseDescription()
-
-	configPath, err := config.ConfigPath()
-	configLine := "unknown"
-	if err != nil {
-		configLine = fmt.Sprintf("error: %v", err)
-	} else if configPath != "" {
-		configLine = configPath
-	}
-
-	backendInfo, err := secrets.ResolveKeyringBackendInfo()
-	backendLine := "unknown"
-	if err != nil {
-		backendLine = fmt.Sprintf("error: %v", err)
-	} else if backendInfo.Value != "" {
-		backendLine = fmt.Sprintf("%s (source: %s)", backendInfo.Value, backendInfo.Source)
-	}
-
-	return fmt.Sprintf("%s\n\nConfig:\n  file: %s\n  keyring backend: %s", desc, configLine, backendLine)
+	return baseDescription()
 }
 
 func newUsageError(err error) error {

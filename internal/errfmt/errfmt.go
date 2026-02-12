@@ -21,43 +21,43 @@ func Format(err error) string {
 
 	var parseErr *kong.ParseError
 	if errors.As(err, &parseErr) {
-		return formatParseError(parseErr)
+		return prefixError(formatParseError(parseErr))
 	}
 
 	if errors.Is(err, os.ErrNotExist) {
-		return err.Error()
+		return prefixError(err.Error())
 	}
 
 	var apiErr *graph.APIError
 	if errors.As(err, &apiErr) {
 		if apiErr.Code != "" {
-			return fmt.Sprintf("Graph API error (%d %s): %s", apiErr.Status, apiErr.Code, apiErr.Message)
+			return prefixError(fmt.Sprintf("Graph API error (%d %s): %s", apiErr.Status, apiErr.Code, apiErr.Message))
 		}
-		return fmt.Sprintf("Graph API error (%d): %s", apiErr.Status, apiErr.Message)
+		return prefixError(fmt.Sprintf("Graph API error (%d): %s", apiErr.Status, apiErr.Message))
 	}
 
 	var userErr *UserFacingError
 	if errors.As(err, &userErr) {
-		return userErr.Message
+		return prefixError(userErr.Message)
 	}
 
 	s := err.Error()
 	if code := aadstsRe.FindString(s); code != "" {
 		switch code {
 		case "AADSTS700016":
-			return code + ": application/client ID not found for this tenant or authority"
+			return prefixError(code + ": application/client ID not found for this tenant or authority")
 		case "AADSTS65001":
-			return code + ": consent required. Re-run login and grant requested permissions"
+			return prefixError(code + ": consent required. Re-run login and grant requested permissions")
 		case "AADSTS50011":
-			return code + ": redirect URI mismatch for the app registration"
+			return prefixError(code + ": redirect URI mismatch for the app registration")
 		case "AADSTS7000218":
-			return code + ": missing or invalid client secret/certificate"
+			return prefixError(code + ": missing or invalid client secret/certificate")
 		default:
-			return code + ": authentication failed. Check authority, audience, tenant, and registration settings"
+			return prefixError(code + ": authentication failed. Check authority, audience, tenant, and registration settings")
 		}
 	}
 
-	return s
+	return prefixError(s)
 }
 
 func formatParseError(err *kong.ParseError) string {
@@ -73,6 +73,17 @@ func formatParseError(err *kong.ParseError) string {
 	}
 
 	return msg
+}
+
+func prefixError(msg string) string {
+	trimmed := strings.TrimSpace(msg)
+	if trimmed == "" {
+		return "Error"
+	}
+	if strings.HasPrefix(strings.ToLower(trimmed), "error:") {
+		return trimmed
+	}
+	return "Error: " + trimmed
 }
 
 // UserFacingError forces a specific user-safe message while preserving cause.

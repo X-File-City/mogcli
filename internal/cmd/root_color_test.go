@@ -7,6 +7,22 @@ import (
 	"testing"
 )
 
+func TestBareInvocationShowsHelp(t *testing.T) {
+	stdout, stderr, err := captureExecuteOutput(t, []string{})
+	if err != nil {
+		t.Fatalf("Execute() failed: %v", err)
+	}
+	if strings.TrimSpace(stderr) != "" {
+		t.Fatalf("expected no stderr on bare invocation, got:\n%s", stderr)
+	}
+	if !strings.Contains(stdout, "USAGE") {
+		t.Fatalf("expected USAGE section, got:\n%s", stdout)
+	}
+	if !strings.Contains(stdout, "COMMANDS") {
+		t.Fatalf("expected COMMANDS section, got:\n%s", stdout)
+	}
+}
+
 func TestHelpDoesNotExposeColorFlag(t *testing.T) {
 	stdout, _, err := captureExecuteOutput(t, []string{"--help"})
 	if err != nil {
@@ -15,6 +31,36 @@ func TestHelpDoesNotExposeColorFlag(t *testing.T) {
 
 	if strings.Contains(stdout, "--color") {
 		t.Fatalf("help output must not contain --color:\n%s", stdout)
+	}
+}
+
+func TestRootHelpPolishSections(t *testing.T) {
+	stdout, _, err := captureExecuteOutput(t, []string{"--help"})
+	if err != nil {
+		t.Fatalf("Execute(--help) failed: %v", err)
+	}
+
+	if strings.Contains(stdout, "Build:") {
+		t.Fatalf("help output must not contain build metadata:\n%s", stdout)
+	}
+	if strings.Contains(stdout, "Config:") {
+		t.Fatalf("help output must not contain config diagnostics:\n%s", stdout)
+	}
+	if !strings.Contains(stdout, "LEARN MORE") {
+		t.Fatalf("expected LEARN MORE section, got:\n%s", stdout)
+	}
+}
+
+func TestSubcommandHelpShowsInheritedFlagsAndExamples(t *testing.T) {
+	stdout, _, err := captureExecuteOutput(t, []string{"mail", "list", "--help"})
+	if err != nil {
+		t.Fatalf("Execute(mail list --help) failed: %v", err)
+	}
+	if !strings.Contains(stdout, "INHERITED FLAGS") {
+		t.Fatalf("expected INHERITED FLAGS section, got:\n%s", stdout)
+	}
+	if !strings.Contains(stdout, "EXAMPLES") {
+		t.Fatalf("expected EXAMPLES section, got:\n%s", stdout)
 	}
 }
 
@@ -29,6 +75,9 @@ func TestRemovedColorFlagIsUnknownUsageError(t *testing.T) {
 	if !strings.Contains(stderr, "unknown flag --color") {
 		t.Fatalf("expected unknown-flag error for --color, got:\n%s", stderr)
 	}
+	if !strings.HasPrefix(strings.TrimSpace(stderr), "Error:") {
+		t.Fatalf("expected Error: prefix, got:\n%s", stderr)
+	}
 }
 
 func TestMOGColorEnvDoesNotAffectVersionExecution(t *testing.T) {
@@ -40,6 +89,9 @@ func TestMOGColorEnvDoesNotAffectVersionExecution(t *testing.T) {
 	}
 	if got, want := strings.TrimSpace(stdout), VersionString(); got != want {
 		t.Fatalf("unexpected version output: got %q want %q", got, want)
+	}
+	if !strings.HasPrefix(strings.TrimSpace(stdout), "mog version ") {
+		t.Fatalf("version output should use gh-style prefix, got %q", strings.TrimSpace(stdout))
 	}
 }
 

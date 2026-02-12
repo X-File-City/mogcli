@@ -8,6 +8,9 @@ import (
 
 func TestFormatAADSTS(t *testing.T) {
 	msg := Format(errors.New("oauth failed: AADSTS700016 unexpected"))
+	if !strings.HasPrefix(msg, "Error: ") {
+		t.Fatalf("expected Error: prefix, got: %s", msg)
+	}
 	if !strings.Contains(msg, "AADSTS700016") {
 		t.Fatalf("expected AADSTS code in message, got: %s", msg)
 	}
