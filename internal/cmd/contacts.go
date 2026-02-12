@@ -19,7 +19,8 @@ type ContactsCmd struct {
 }
 
 type ContactsListCmd struct {
-	Max int `name:"max" default:"100" help:"Maximum contacts"`
+	Max  int    `name:"max" default:"100" help:"Maximum contacts"`
+	Page string `name:"page" aliases:"next-token" help:"Resume from next page token"`
 }
 
 func (c *ContactsListCmd) Run(ctx context.Context) error {
@@ -27,8 +28,12 @@ func (c *ContactsListCmd) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	page, err := normalizePageToken(c.Page)
+	if err != nil {
+		return err
+	}
 
-	items, next, err := contacts.New(rt.Graph).List(ctx, c.Max)
+	items, next, err := contacts.New(rt.Graph).List(ctx, c.Max, page)
 	if err != nil {
 		return err
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"os"
+	"strings"
 	"text/tabwriter"
 
 	"github.com/jared/mogcli/internal/outfmt"
@@ -22,5 +23,12 @@ func printNextPageHint(u *ui.UI, nextPageToken string) {
 	if u == nil || nextPageToken == "" {
 		return
 	}
-	u.Err().Printf("# Next page: --page %s", nextPageToken)
+	u.Err().Printf("# Next page: --page %s", shellQuote(nextPageToken))
+}
+
+func shellQuote(value string) string {
+	if value == "" {
+		return "''"
+	}
+	return "'" + strings.ReplaceAll(value, "'", `'\''`) + "'"
 }

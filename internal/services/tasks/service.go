@@ -32,19 +32,30 @@ func (s *Service) Lists(ctx context.Context) ([]map[string]any, error) {
 	return items, err
 }
 
-func (s *Service) ListTasks(ctx context.Context, listID string, max int) ([]map[string]any, string, error) {
+func (s *Service) ListTasks(ctx context.Context, listID string, max int, page string) ([]map[string]any, string, error) {
 	query := url.Values{}
 	if max > 0 {
 		query.Set("$top", fmt.Sprintf("%d", max))
 	}
 
 	path := "/me/todo/lists/" + url.PathEscape(strings.TrimSpace(listID)) + "/tasks"
+	if strings.TrimSpace(page) != "" {
+		path = strings.TrimSpace(page)
+		query = nil
+	}
+
 	_, body, err := s.client.Do(ctx, http.MethodGet, path, query, nil, DelegatedScopes, nil)
 	if err != nil {
 		return nil, "", err
 	}
 
-	return decodeValuePage(body)
+	items, next, err := decodeValuePage(body)
+	if err != nil {
+		return nil, "", err
+	}
+
+	trimmed, trimmedNext := trimPage(items, next, max)
+	return trimmed, trimmedNext, nil
 }
 
 func (s *Service) GetTask(ctx context.Context, listID string, taskID string) (map[string]any, error) {
@@ -153,4 +164,11 @@ func isTaskMutabilityError(code string, message string) bool {
 	}
 
 	return false
+}
+
+func trimPage(items []map[string]any, next string, max int) ([]map[string]any, string) {
+	if max <= 0 || len(items) <= max {
+		return items, next
+	}
+	return items[:max], next
 }

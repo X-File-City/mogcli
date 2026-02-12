@@ -21,7 +21,7 @@ func New(client *graph.Client) *Service {
 	return &Service{client: client}
 }
 
-func (s *Service) List(ctx context.Context, from string, to string, max int) ([]map[string]any, string, error) {
+func (s *Service) List(ctx context.Context, from string, to string, max int, page string) ([]map[string]any, string, error) {
 	query := url.Values{}
 	query.Set("startDateTime", from)
 	query.Set("endDateTime", to)
@@ -33,12 +33,24 @@ func (s *Service) List(ctx context.Context, from string, to string, max int) ([]
 	headers := http.Header{}
 	headers.Set("Prefer", `outlook.timezone="UTC"`)
 
-	_, body, err := s.client.Do(ctx, http.MethodGet, "/me/calendarView", query, nil, DelegatedScopes, headers)
+	endpoint := "/me/calendarView"
+	if strings.TrimSpace(page) != "" {
+		endpoint = strings.TrimSpace(page)
+		query = nil
+	}
+
+	_, body, err := s.client.Do(ctx, http.MethodGet, endpoint, query, nil, DelegatedScopes, headers)
 	if err != nil {
 		return nil, "", err
 	}
 
-	return decodeValuePage(body)
+	items, next, err := decodeValuePage(body)
+	if err != nil {
+		return nil, "", err
+	}
+
+	trimmed, trimmedNext := trimPage(items, next, max)
+	return trimmed, trimmedNext, nil
 }
 
 func (s *Service) Get(ctx context.Context, id string) (map[string]any, error) {
@@ -80,4 +92,11 @@ func decodeValuePage(body []byte) ([]map[string]any, string, error) {
 
 	next, _ := payload["@odata.nextLink"].(string)
 	return items, strings.TrimSpace(next), nil
+}
+
+func trimPage(items []map[string]any, next string, max int) ([]map[string]any, string) {
+	if max <= 0 || len(items) <= max {
+		return items, next
+	}
+	return items[:max], next
 }

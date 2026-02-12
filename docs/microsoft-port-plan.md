@@ -275,7 +275,8 @@ Per-workload requirements:
 2. At least one mutating command.
 3. Table/plain/json output parity.
 4. `--max`/`--page` paging UX with next page hints.
-5. Required scopes listed in help.
+5. `--page` accepts raw Graph `@odata.nextLink`; `--next-token` is an alias for the same value.
+6. Required scopes listed in help.
 
 Exit criteria:
 

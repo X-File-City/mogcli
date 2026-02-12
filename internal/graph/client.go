@@ -208,6 +208,13 @@ func (c *Client) resolveURL(path string, query url.Values) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("parse path: %w", err)
 		}
+		base, err := url.Parse(c.baseURL())
+		if err != nil {
+			return "", fmt.Errorf("parse base URL: %w", err)
+		}
+		if !sameHost(base, u) {
+			return "", fmt.Errorf("cross-host URL is not allowed: %s", u.Host)
+		}
 		if len(query) > 0 {
 			u.RawQuery = query.Encode()
 		}
@@ -223,6 +230,13 @@ func (c *Client) resolveURL(path string, query url.Values) (string, error) {
 	}
 
 	return u.String(), nil
+}
+
+func sameHost(base *url.URL, target *url.URL) bool {
+	if base == nil || target == nil {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(base.Host), strings.TrimSpace(target.Host))
 }
 
 func (c *Client) Paginate(ctx context.Context, path string, query url.Values, scopes []string, max int) ([]map[string]any, string, error) {

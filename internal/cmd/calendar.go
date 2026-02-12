@@ -23,17 +23,22 @@ type CalendarListCmd struct {
 	From string `name:"from" help:"Start time (RFC3339 or date)"`
 	To   string `name:"to" help:"End time (RFC3339 or date)"`
 	Max  int    `name:"max" default:"50" help:"Maximum events"`
+	Page string `name:"page" aliases:"next-token" help:"Resume from next page token"`
 }
 
 func (c *CalendarListCmd) Run(ctx context.Context) error {
 	from, to := normalizeRange(c.From, c.To)
+	page, err := normalizePageToken(c.Page)
+	if err != nil {
+		return err
+	}
 	rt, err := resolveRuntime(ctx, capCalendarList)
 	if err != nil {
 		return err
 	}
 
 	svc := calendar.New(rt.Graph)
-	items, next, err := svc.List(ctx, from, to, c.Max)
+	items, next, err := svc.List(ctx, from, to, c.Max, page)
 	if err != nil {
 		return err
 	}

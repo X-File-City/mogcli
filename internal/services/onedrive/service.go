@@ -22,7 +22,11 @@ func New(client *graph.Client) *Service {
 	return &Service{client: client}
 }
 
-func (s *Service) List(ctx context.Context, remotePath string, max int) ([]map[string]any, string, error) {
+func (s *Service) List(ctx context.Context, remotePath string, max int, page string) ([]map[string]any, string, error) {
+	if strings.TrimSpace(page) != "" {
+		return s.client.Paginate(ctx, strings.TrimSpace(page), nil, DelegatedScopes, max)
+	}
+
 	endpoint := "/me/drive/root/children"
 	if cleaned := normalizeRemotePath(remotePath); cleaned != "/" {
 		endpoint = "/me/drive/root:" + cleaned + ":/children"

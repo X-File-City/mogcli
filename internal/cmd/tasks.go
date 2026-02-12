@@ -42,6 +42,7 @@ func (c *TasksListsCmd) Run(ctx context.Context) error {
 type TasksListCmd struct {
 	ListID string `name:"list" required:"" help:"Task list ID"`
 	Max    int    `name:"max" default:"100" help:"Maximum tasks"`
+	Page   string `name:"page" aliases:"next-token" help:"Resume from next page token"`
 }
 
 func (c *TasksListCmd) Run(ctx context.Context) error {
@@ -49,7 +50,11 @@ func (c *TasksListCmd) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	items, next, err := tasksvc.New(rt.Graph).ListTasks(ctx, c.ListID, c.Max)
+	page, err := normalizePageToken(c.Page)
+	if err != nil {
+		return err
+	}
+	items, next, err := tasksvc.New(rt.Graph).ListTasks(ctx, c.ListID, c.Max, page)
 	if err != nil {
 		return err
 	}

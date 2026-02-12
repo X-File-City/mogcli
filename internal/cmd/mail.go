@@ -19,6 +19,7 @@ type MailCmd struct {
 type MailListCmd struct {
 	Max   int    `name:"max" default:"20" help:"Maximum messages"`
 	Query string `name:"query" help:"Search query text"`
+	Page  string `name:"page" aliases:"next-token" help:"Resume from next page token"`
 }
 
 func (c *MailListCmd) Run(ctx context.Context) error {
@@ -26,9 +27,13 @@ func (c *MailListCmd) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	page, err := normalizePageToken(c.Page)
+	if err != nil {
+		return err
+	}
 
 	svc := mail.New(rt.Graph)
-	items, next, err := svc.List(ctx, c.Max, c.Query)
+	items, next, err := svc.List(ctx, c.Max, c.Query, page)
 	if err != nil {
 		return err
 	}

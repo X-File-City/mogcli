@@ -23,6 +23,7 @@ type OneDriveCmd struct {
 type OneDriveListCmd struct {
 	Path string `name:"path" default:"/" help:"Remote path"`
 	Max  int    `name:"max" default:"100" help:"Maximum items to return"`
+	Page string `name:"page" aliases:"next-token" help:"Resume from next page token"`
 }
 
 func (c *OneDriveListCmd) Run(ctx context.Context) error {
@@ -30,9 +31,13 @@ func (c *OneDriveListCmd) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	page, err := normalizePageToken(c.Page)
+	if err != nil {
+		return err
+	}
 
 	svc := onedrive.New(rt.Graph)
-	items, next, err := svc.List(ctx, c.Path, c.Max)
+	items, next, err := svc.List(ctx, c.Path, c.Max, page)
 	if err != nil {
 		return err
 	}

@@ -21,7 +21,7 @@ func New(client *graph.Client) *Service {
 	return &Service{client: client}
 }
 
-func (s *Service) List(ctx context.Context, max int, queryText string) ([]map[string]any, string, error) {
+func (s *Service) List(ctx context.Context, max int, queryText string, page string) ([]map[string]any, string, error) {
 	query := url.Values{}
 	if max > 0 {
 		query.Set("$top", fmt.Sprintf("%d", max))
@@ -34,12 +34,27 @@ func (s *Service) List(ctx context.Context, max int, queryText string) ([]map[st
 		headers.Set("ConsistencyLevel", "eventual")
 	}
 
-	_, body, err := s.client.Do(ctx, http.MethodGet, "/me/messages", query, nil, DelegatedScopes, headers)
+	endpoint := "/me/messages"
+	if strings.TrimSpace(page) != "" {
+		endpoint = strings.TrimSpace(page)
+		query = nil
+		if hasSearchQuery(page) {
+			headers.Set("ConsistencyLevel", "eventual")
+		}
+	}
+
+	_, body, err := s.client.Do(ctx, http.MethodGet, endpoint, query, nil, DelegatedScopes, headers)
 	if err != nil {
 		return nil, "", err
 	}
 
-	return decodeValuePage(body)
+	items, next, err := decodeValuePage(body)
+	if err != nil {
+		return nil, "", err
+	}
+
+	trimmed, trimmedNext := trimPage(items, next, max)
+	return trimmed, trimmedNext, nil
 }
 
 func (s *Service) Get(ctx context.Context, id string) (map[string]any, error) {
@@ -100,4 +115,19 @@ func jsonUnmarshal(data []byte, v any) error {
 		return fmt.Errorf("decode json response: %w", err)
 	}
 	return nil
+}
+
+func trimPage(items []map[string]any, next string, max int) ([]map[string]any, string) {
+	if max <= 0 || len(items) <= max {
+		return items, next
+	}
+	return items[:max], next
+}
+
+func hasSearchQuery(page string) bool {
+	u, err := url.Parse(strings.TrimSpace(page))
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(u.Query().Get("$search")) != ""
 }

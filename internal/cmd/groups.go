@@ -15,7 +15,8 @@ type GroupsCmd struct {
 }
 
 type GroupsListCmd struct {
-	Max int `name:"max" default:"100" help:"Maximum groups"`
+	Max  int    `name:"max" default:"100" help:"Maximum groups"`
+	Page string `name:"page" aliases:"next-token" help:"Resume from next page token"`
 }
 
 func (c *GroupsListCmd) Run(ctx context.Context) error {
@@ -23,8 +24,12 @@ func (c *GroupsListCmd) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	page, err := normalizePageToken(c.Page)
+	if err != nil {
+		return err
+	}
 
-	items, next, err := groupsvc.New(rt.Graph).List(ctx, c.Max)
+	items, next, err := groupsvc.New(rt.Graph).List(ctx, c.Max, page)
 	if err != nil {
 		return err
 	}
@@ -60,8 +65,9 @@ func (c *GroupsGetCmd) Run(ctx context.Context) error {
 }
 
 type GroupsMembersCmd struct {
-	ID  string `arg:"" required:"" help:"Group ID"`
-	Max int    `name:"max" default:"100" help:"Maximum members"`
+	ID   string `arg:"" required:"" help:"Group ID"`
+	Max  int    `name:"max" default:"100" help:"Maximum members"`
+	Page string `name:"page" aliases:"next-token" help:"Resume from next page token"`
 }
 
 func (c *GroupsMembersCmd) Run(ctx context.Context) error {
@@ -69,8 +75,12 @@ func (c *GroupsMembersCmd) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	page, err := normalizePageToken(c.Page)
+	if err != nil {
+		return err
+	}
 
-	items, next, err := groupsvc.New(rt.Graph).Members(ctx, c.ID, c.Max)
+	items, next, err := groupsvc.New(rt.Graph).Members(ctx, c.ID, c.Max, page)
 	if err != nil {
 		return err
 	}

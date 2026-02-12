@@ -156,8 +156,20 @@ OneDrive:
 
 ```bash
 mog onedrive ls --path /
+# resume from a prior next token
+mog onedrive ls --page "https://graph.microsoft.com/v1.0/me/drive/root/children?$skiptoken=..."
+# equivalent alias
+mog onedrive ls --next-token "https://graph.microsoft.com/v1.0/me/drive/root/children?$skiptoken=..."
 mog onedrive put ./report.pdf --path /Reports/report.pdf
 mog onedrive get /Reports/report.pdf --out ./report.pdf
+```
+
+Pagination resume:
+
+```bash
+mog groups list --max 50
+# copy next value from JSON output or next-page hint:
+mog groups list --page "https://graph.microsoft.com/v1.0/groups?$skiptoken=..."
 ```
 
 ## Output Modes
@@ -236,3 +248,7 @@ Repository docs:
 ## License
 
 MIT
+
+## Author
+
+- Jared Palmer (https://x.com/jaredpalmer)

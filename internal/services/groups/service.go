@@ -21,19 +21,31 @@ func New(client *graph.Client) *Service {
 	return &Service{client: client}
 }
 
-func (s *Service) List(ctx context.Context, max int) ([]map[string]any, string, error) {
+func (s *Service) List(ctx context.Context, max int, page string) ([]map[string]any, string, error) {
 	query := url.Values{}
 	query.Set("$select", "id,displayName,mail,mailEnabled,securityEnabled")
 	if max > 0 {
 		query.Set("$top", fmt.Sprintf("%d", max))
 	}
 
-	_, body, err := s.client.Do(ctx, http.MethodGet, "/groups", query, nil, DelegatedScopes, nil)
+	endpoint := "/groups"
+	if strings.TrimSpace(page) != "" {
+		endpoint = strings.TrimSpace(page)
+		query = nil
+	}
+
+	_, body, err := s.client.Do(ctx, http.MethodGet, endpoint, query, nil, DelegatedScopes, nil)
 	if err != nil {
 		return nil, "", err
 	}
 
-	return decodeValuePage(body)
+	items, next, err := decodeValuePage(body)
+	if err != nil {
+		return nil, "", err
+	}
+
+	trimmed, trimmedNext := trimPage(items, next, max)
+	return trimmed, trimmedNext, nil
 }
 
 func (s *Service) Get(ctx context.Context, id string) (map[string]any, error) {
@@ -42,18 +54,30 @@ func (s *Service) Get(ctx context.Context, id string) (map[string]any, error) {
 	return payload, err
 }
 
-func (s *Service) Members(ctx context.Context, id string, max int) ([]map[string]any, string, error) {
+func (s *Service) Members(ctx context.Context, id string, max int, page string) ([]map[string]any, string, error) {
 	query := url.Values{}
 	if max > 0 {
 		query.Set("$top", fmt.Sprintf("%d", max))
 	}
 
-	_, body, err := s.client.Do(ctx, http.MethodGet, "/groups/"+url.PathEscape(strings.TrimSpace(id))+"/members", query, nil, DelegatedScopes, nil)
+	endpoint := "/groups/" + url.PathEscape(strings.TrimSpace(id)) + "/members"
+	if strings.TrimSpace(page) != "" {
+		endpoint = strings.TrimSpace(page)
+		query = nil
+	}
+
+	_, body, err := s.client.Do(ctx, http.MethodGet, endpoint, query, nil, DelegatedScopes, nil)
 	if err != nil {
 		return nil, "", err
 	}
 
-	return decodeValuePage(body)
+	items, next, err := decodeValuePage(body)
+	if err != nil {
+		return nil, "", err
+	}
+
+	trimmed, trimmedNext := trimPage(items, next, max)
+	return trimmed, trimmedNext, nil
 }
 
 func decodeValuePage(body []byte) ([]map[string]any, string, error) {
@@ -73,4 +97,11 @@ func decodeValuePage(body []byte) ([]map[string]any, string, error) {
 
 	next, _ := payload["@odata.nextLink"].(string)
 	return items, strings.TrimSpace(next), nil
+}
+
+func trimPage(items []map[string]any, next string, max int) ([]map[string]any, string) {
+	if max <= 0 || len(items) <= max {
+		return items, next
+	}
+	return items[:max], next
 }
