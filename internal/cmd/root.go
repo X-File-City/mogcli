@@ -9,12 +9,12 @@ import (
 
 	"github.com/alecthomas/kong"
 
-	"github.com/jared/mogcli/internal/authclient"
-	"github.com/jared/mogcli/internal/config"
-	"github.com/jared/mogcli/internal/errfmt"
-	"github.com/jared/mogcli/internal/outfmt"
-	"github.com/jared/mogcli/internal/secrets"
-	"github.com/jared/mogcli/internal/ui"
+	"github.com/jaredpalmer/mogcli/internal/authclient"
+	"github.com/jaredpalmer/mogcli/internal/config"
+	"github.com/jaredpalmer/mogcli/internal/errfmt"
+	"github.com/jaredpalmer/mogcli/internal/outfmt"
+	"github.com/jaredpalmer/mogcli/internal/secrets"
+	"github.com/jaredpalmer/mogcli/internal/ui"
 )
 
 type RootFlags struct {

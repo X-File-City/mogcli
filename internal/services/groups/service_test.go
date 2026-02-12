@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/jared/mogcli/internal/graph"
+	"github.com/jaredpalmer/mogcli/internal/graph"
 )
 
 func TestListUsesPageTokenURL(t *testing.T) {

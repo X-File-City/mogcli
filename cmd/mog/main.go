@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/jared/mogcli/internal/cmd"
+	"github.com/jaredpalmer/mogcli/internal/cmd"
 )
 
 func main() {

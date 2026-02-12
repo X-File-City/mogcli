@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jared/mogcli/internal/outfmt"
-	"github.com/jared/mogcli/internal/services/calendar"
+	"github.com/jaredpalmer/mogcli/internal/outfmt"
+	"github.com/jaredpalmer/mogcli/internal/services/calendar"
 )
 
 type CalendarCmd struct {

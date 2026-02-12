@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/jared/mogcli/internal/config"
+	"github.com/jaredpalmer/mogcli/internal/config"
 )
 
 var (

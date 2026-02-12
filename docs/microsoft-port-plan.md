@@ -1,7 +1,7 @@
 # mogcli Microsoft Port Plan (Revision 2)
 
 Date: 2026-02-12
-Status: implementation-ready (runtime capability matrix and task mutability error normalization implemented)
+Status: implementation in progress (auth wizard, progressive delegated consent, and selective app-only routing implemented)
 Audience: Codex agents implementing `mogcli`
 
 ## Implementation status update (2026-02-12)
@@ -9,8 +9,14 @@ Audience: Codex agents implementing `mogcli`
 Implemented in codebase:
 
 1. Command-level capability matrix enforcement in `internal/cmd/runtime.go` for all current workload commands.
-2. Fail-fast app-only gating for delegated-only `/me` workloads with actionable user-facing messages.
-3. Task mutation mutability error normalization in `internal/services/tasks/service.go` for built-in/well-known Microsoft To Do list constraints.
+2. Interactive default `mog auth` wizard with workload-group delegated scope selection.
+3. Scripted `mog auth login` delegated bootstrap with required `--scope-workloads`.
+4. Profile metadata persistence for delegated bootstrap workloads and app-only default target user.
+5. Progressive delegated consent via per-operation minimal scopes (no broad default command scopes).
+6. Delegated token restore hardening: cached scope coverage checks, refresh on missing scope, account/tenant consistency validation, and cache purge on mismatch.
+7. App-only endpoint routing for mail/contacts/onedrive using `/users/{id}` with `--user` override and profile fallback.
+8. Explicit fail-fast app-only rejection for calendar/tasks with deterministic user-facing guidance.
+9. Task mutation mutability error normalization in `internal/services/tasks/service.go` for built-in/well-known Microsoft To Do list constraints.
 
 ## 0. Critique of the prior plan
 
@@ -35,7 +41,7 @@ Already decided with user:
 
 1. Use separate app registrations/client IDs for consumer and enterprise profiles.
 2. Allow login to both audiences, but exactly one active profile at a time.
-3. Defer app-only support to phase 2 (after delegated flows are stable).
+3. App-only support is workload-scoped: enabled for mail/contacts/onedrive with explicit target-user routing; calendar/tasks remain delegated-only.
 4. Use unstyled plain-text terminal output only; remove `--color` and `MOG_COLOR`.
 
 Reference: current project state and sources inventory [L1], [L2].
@@ -130,11 +136,13 @@ Use per-profile token cache key namespace:
 
 Phase-1 command surface:
 
-1. `mog auth login --profile <name> --audience consumer|enterprise --client-id <id> [--tenant <tenant>] [--authority ...]`
-2. `mog auth logout [--profile <name>|--all]`
-3. `mog auth accounts`
-4. `mog auth use <profile-name>`
-5. `mog auth whoami`
+1. `mog auth` (interactive default wizard for profile setup/login).
+2. `mog auth login --profile <name> --audience consumer|enterprise --client-id <id> --scope-workloads <csv> [--tenant <tenant>] [--authority ...]`
+3. `mog auth login --mode app-only --app-only-user <upn-or-id> ...` for profile-level app-only target-user defaults.
+4. `mog auth logout [--profile <name>|--all]`
+5. `mog auth accounts`
+6. `mog auth use <profile-name>`
+7. `mog auth whoami`
 
 Phase-2 additions:
 
@@ -160,12 +168,12 @@ Phase-1 delegated MVP scope:
 | Tasks (To Do) | `lists`, `list`, `get`, `create`, `update`, `complete`, `delete` | `/me/todo/lists`, `/me/todo/lists/{id}/tasks` | `Tasks.Read`, `Tasks.ReadWrite` | Built-in lists have mutability limits [MS9] |
 | OneDrive | `ls`, `get`, `put`, `mkdir`, `rm` | `/me/drive`, `/me/drive/root/children`, `/drives/{id}/items/...` | `Files.Read`, `Files.ReadWrite` | Some drive metadata endpoints are delegated-only [MS10], [MS11] |
 
-Phase-2 app-only support should be added only where Graph allows it:
+Current app-only routing/constraints implemented:
 
-1. Groups: supported in app context for many endpoints [MS7].
-2. OneDrive item operations: app permissions supported on driveItem endpoints [MS10].
-3. `/me/*` endpoints are generally delegated-context patterns; app-only requires user/drive explicit routing.
-4. Tasks app-only write is constrained; enforce explicit unsupported errors where necessary [MS8].
+1. Mail, Contacts, and OneDrive support app-only via `/users/{id}` endpoint routing.
+2. Target user resolution order is command `--user` override, then profile `app_only_user`; missing target returns explicit user-facing error.
+3. Calendar and Tasks reject app-only mode with deterministic fail-fast guidance.
+4. Groups behavior is unchanged (non-`/me`, enterprise-gated).
 
 ## 6. Port manifest: copy vs adapt vs rewrite
 

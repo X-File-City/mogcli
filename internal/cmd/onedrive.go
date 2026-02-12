@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/jared/mogcli/internal/config"
-	"github.com/jared/mogcli/internal/outfmt"
-	"github.com/jared/mogcli/internal/services/onedrive"
+	"github.com/jaredpalmer/mogcli/internal/config"
+	"github.com/jaredpalmer/mogcli/internal/outfmt"
+	"github.com/jaredpalmer/mogcli/internal/services/onedrive"
 )
 
 type OneDriveCmd struct {
@@ -24,10 +24,15 @@ type OneDriveListCmd struct {
 	Path string `name:"path" default:"/" help:"Remote path"`
 	Max  int    `name:"max" default:"100" help:"Maximum items to return"`
 	Page string `name:"page" aliases:"next-token" help:"Resume from next page token"`
+	User string `name:"user" help:"App-only target user override (UPN or user ID)"`
 }
 
 func (c *OneDriveListCmd) Run(ctx context.Context) error {
 	rt, err := resolveRuntime(ctx, capOneDriveLS)
+	if err != nil {
+		return err
+	}
+	targetUser, err := resolveAppOnlyTargetUser(rt.Profile, c.User)
 	if err != nil {
 		return err
 	}
@@ -36,7 +41,7 @@ func (c *OneDriveListCmd) Run(ctx context.Context) error {
 		return err
 	}
 
-	svc := onedrive.New(rt.Graph)
+	svc := onedrive.New(rt.Graph, targetUser)
 	items, next, err := svc.List(ctx, c.Path, c.Max, page)
 	if err != nil {
 		return err
@@ -54,6 +59,7 @@ func (c *OneDriveListCmd) Run(ctx context.Context) error {
 type OneDriveGetCmd struct {
 	Path string `arg:"" required:"" help:"Remote file path"`
 	Out  string `name:"out" aliases:"output" help:"Output file path"`
+	User string `name:"user" help:"App-only target user override (UPN or user ID)"`
 }
 
 func (c *OneDriveGetCmd) Run(ctx context.Context) error {
@@ -61,8 +67,12 @@ func (c *OneDriveGetCmd) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	targetUser, err := resolveAppOnlyTargetUser(rt.Profile, c.User)
+	if err != nil {
+		return err
+	}
 
-	svc := onedrive.New(rt.Graph)
+	svc := onedrive.New(rt.Graph, targetUser)
 	content, err := svc.Get(ctx, c.Path)
 	if err != nil {
 		return err
@@ -102,10 +112,15 @@ func (c *OneDriveGetCmd) Run(ctx context.Context) error {
 type OneDrivePutCmd struct {
 	LocalPath  string `arg:"" required:"" help:"Local file path"`
 	RemotePath string `name:"path" required:"" help:"Remote destination path"`
+	User       string `name:"user" help:"App-only target user override (UPN or user ID)"`
 }
 
 func (c *OneDrivePutCmd) Run(ctx context.Context) error {
 	rt, err := resolveRuntime(ctx, capOneDrivePut)
+	if err != nil {
+		return err
+	}
+	targetUser, err := resolveAppOnlyTargetUser(rt.Profile, c.User)
 	if err != nil {
 		return err
 	}
@@ -120,7 +135,7 @@ func (c *OneDrivePutCmd) Run(ctx context.Context) error {
 		return fmt.Errorf("read local file: %w", err)
 	}
 
-	svc := onedrive.New(rt.Graph)
+	svc := onedrive.New(rt.Graph, targetUser)
 	if err := svc.Put(ctx, c.RemotePath, content); err != nil {
 		return err
 	}
@@ -135,6 +150,7 @@ func (c *OneDrivePutCmd) Run(ctx context.Context) error {
 
 type OneDriveMkdirCmd struct {
 	Path string `name:"path" required:"" help:"Remote folder path"`
+	User string `name:"user" help:"App-only target user override (UPN or user ID)"`
 }
 
 func (c *OneDriveMkdirCmd) Run(ctx context.Context) error {
@@ -142,8 +158,12 @@ func (c *OneDriveMkdirCmd) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	targetUser, err := resolveAppOnlyTargetUser(rt.Profile, c.User)
+	if err != nil {
+		return err
+	}
 
-	svc := onedrive.New(rt.Graph)
+	svc := onedrive.New(rt.Graph, targetUser)
 	if err := svc.Mkdir(ctx, c.Path); err != nil {
 		return err
 	}
@@ -158,6 +178,7 @@ func (c *OneDriveMkdirCmd) Run(ctx context.Context) error {
 
 type OneDriveRmCmd struct {
 	Path string `name:"path" required:"" help:"Remote path to delete"`
+	User string `name:"user" help:"App-only target user override (UPN or user ID)"`
 }
 
 func (c *OneDriveRmCmd) Run(ctx context.Context) error {
@@ -173,8 +194,12 @@ func (c *OneDriveRmCmd) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	targetUser, err := resolveAppOnlyTargetUser(rt.Profile, c.User)
+	if err != nil {
+		return err
+	}
 
-	svc := onedrive.New(rt.Graph)
+	svc := onedrive.New(rt.Graph, targetUser)
 	if err := svc.Remove(ctx, c.Path); err != nil {
 		return err
 	}

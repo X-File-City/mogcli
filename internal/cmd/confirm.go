@@ -8,7 +8,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/jared/mogcli/internal/input"
+	"github.com/jaredpalmer/mogcli/internal/input"
 )
 
 func confirmDestructive(ctx context.Context, flags *RootFlags, action string) error {

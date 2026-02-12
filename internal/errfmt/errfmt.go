@@ -9,7 +9,7 @@ import (
 
 	"github.com/alecthomas/kong"
 
-	"github.com/jared/mogcli/internal/graph"
+	"github.com/jaredpalmer/mogcli/internal/graph"
 )
 
 var aadstsRe = regexp.MustCompile(`AADSTS\d+`)

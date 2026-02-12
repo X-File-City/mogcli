@@ -6,8 +6,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/jared/mogcli/internal/outfmt"
-	tasksvc "github.com/jared/mogcli/internal/services/tasks"
+	"github.com/jaredpalmer/mogcli/internal/outfmt"
+	tasksvc "github.com/jaredpalmer/mogcli/internal/services/tasks"
 )
 
 type TasksCmd struct {

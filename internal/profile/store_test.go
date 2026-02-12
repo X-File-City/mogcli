@@ -3,7 +3,7 @@ package profile
 import (
 	"testing"
 
-	"github.com/jared/mogcli/internal/config"
+	"github.com/jaredpalmer/mogcli/internal/config"
 )
 
 func TestNormalizeName(t *testing.T) {

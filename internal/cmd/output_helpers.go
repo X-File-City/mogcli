@@ -7,8 +7,8 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/jared/mogcli/internal/outfmt"
-	"github.com/jared/mogcli/internal/ui"
+	"github.com/jaredpalmer/mogcli/internal/outfmt"
+	"github.com/jaredpalmer/mogcli/internal/ui"
 )
 
 func tableWriter(ctx context.Context) (io.Writer, func()) {

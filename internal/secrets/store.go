@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/jared/mogcli/internal/config"
+	"github.com/jaredpalmer/mogcli/internal/config"
 )
 
 const (

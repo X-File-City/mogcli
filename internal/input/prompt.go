@@ -6,7 +6,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/jared/mogcli/internal/ui"
+	"github.com/jaredpalmer/mogcli/internal/ui"
 )
 
 func PromptLine(ctx context.Context, prompt string) (string, error) {

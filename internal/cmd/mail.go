@@ -6,8 +6,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/jared/mogcli/internal/outfmt"
-	"github.com/jared/mogcli/internal/services/mail"
+	"github.com/jaredpalmer/mogcli/internal/outfmt"
+	"github.com/jaredpalmer/mogcli/internal/services/mail"
 )
 
 type MailCmd struct {
@@ -20,10 +20,15 @@ type MailListCmd struct {
 	Max   int    `name:"max" default:"20" help:"Maximum messages"`
 	Query string `name:"query" help:"Search query text"`
 	Page  string `name:"page" aliases:"next-token" help:"Resume from next page token"`
+	User  string `name:"user" help:"App-only target user override (UPN or user ID)"`
 }
 
 func (c *MailListCmd) Run(ctx context.Context) error {
 	rt, err := resolveRuntime(ctx, capMailList)
+	if err != nil {
+		return err
+	}
+	targetUser, err := resolveAppOnlyTargetUser(rt.Profile, c.User)
 	if err != nil {
 		return err
 	}
@@ -32,7 +37,7 @@ func (c *MailListCmd) Run(ctx context.Context) error {
 		return err
 	}
 
-	svc := mail.New(rt.Graph)
+	svc := mail.New(rt.Graph, targetUser)
 	items, next, err := svc.List(ctx, c.Max, c.Query, page)
 	if err != nil {
 		return err
@@ -48,7 +53,8 @@ func (c *MailListCmd) Run(ctx context.Context) error {
 }
 
 type MailGetCmd struct {
-	ID string `arg:"" required:"" help:"Message ID"`
+	ID   string `arg:"" required:"" help:"Message ID"`
+	User string `name:"user" help:"App-only target user override (UPN or user ID)"`
 }
 
 func (c *MailGetCmd) Run(ctx context.Context) error {
@@ -56,8 +62,12 @@ func (c *MailGetCmd) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	targetUser, err := resolveAppOnlyTargetUser(rt.Profile, c.User)
+	if err != nil {
+		return err
+	}
 
-	svc := mail.New(rt.Graph)
+	svc := mail.New(rt.Graph, targetUser)
 	item, err := svc.Get(ctx, c.ID)
 	if err != nil {
 		return err
@@ -75,10 +85,15 @@ type MailSendCmd struct {
 	To      []string `name:"to" required:"" help:"Recipient email (repeat or comma-separate)"`
 	Subject string   `name:"subject" required:"" help:"Email subject"`
 	Body    string   `name:"body" required:"" help:"Plain text body"`
+	User    string   `name:"user" help:"App-only target user override (UPN or user ID)"`
 }
 
 func (c *MailSendCmd) Run(ctx context.Context) error {
 	rt, err := resolveRuntime(ctx, capMailSend)
+	if err != nil {
+		return err
+	}
+	targetUser, err := resolveAppOnlyTargetUser(rt.Profile, c.User)
 	if err != nil {
 		return err
 	}
@@ -88,7 +103,7 @@ func (c *MailSendCmd) Run(ctx context.Context) error {
 		return usage("at least one --to recipient is required")
 	}
 
-	svc := mail.New(rt.Graph)
+	svc := mail.New(rt.Graph, targetUser)
 	if err := svc.Send(ctx, recipients, c.Subject, c.Body); err != nil {
 		return err
 	}

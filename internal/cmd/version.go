@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/jared/mogcli/internal/outfmt"
+	"github.com/jaredpalmer/mogcli/internal/outfmt"
 )
 
 var (

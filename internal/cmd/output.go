@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/jared/mogcli/internal/outfmt"
+	"github.com/jaredpalmer/mogcli/internal/outfmt"
 )
 
 func writeJSON(ctx context.Context, payload any) error {

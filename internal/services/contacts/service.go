@@ -8,17 +8,22 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/jared/mogcli/internal/graph"
+	"github.com/jaredpalmer/mogcli/internal/graph"
 )
 
-var DelegatedScopes = []string{"Contacts.Read", "Contacts.ReadWrite"}
+var listContactsScopes = []string{"Contacts.Read"}
+var getContactsScopes = []string{"Contacts.Read"}
+var createContactsScopes = []string{"Contacts.ReadWrite"}
+var updateContactsScopes = []string{"Contacts.ReadWrite"}
+var deleteContactsScopes = []string{"Contacts.ReadWrite"}
 
 type Service struct {
-	client *graph.Client
+	client      *graph.Client
+	appOnlyUser string
 }
 
-func New(client *graph.Client) *Service {
-	return &Service{client: client}
+func New(client *graph.Client, appOnlyUser string) *Service {
+	return &Service{client: client, appOnlyUser: strings.TrimSpace(appOnlyUser)}
 }
 
 func (s *Service) List(ctx context.Context, max int, page string) ([]map[string]any, string, error) {
@@ -28,13 +33,13 @@ func (s *Service) List(ctx context.Context, max int, page string) ([]map[string]
 		query.Set("$top", fmt.Sprintf("%d", max))
 	}
 
-	endpoint := "/me/contacts"
+	endpoint := s.contactsEndpoint()
 	if strings.TrimSpace(page) != "" {
 		endpoint = strings.TrimSpace(page)
 		query = nil
 	}
 
-	_, body, err := s.client.Do(ctx, http.MethodGet, endpoint, query, nil, DelegatedScopes, nil)
+	_, body, err := s.client.Do(ctx, http.MethodGet, endpoint, query, nil, listContactsScopes, nil)
 	if err != nil {
 		return nil, "", err
 	}
@@ -50,24 +55,31 @@ func (s *Service) List(ctx context.Context, max int, page string) ([]map[string]
 
 func (s *Service) Get(ctx context.Context, id string) (map[string]any, error) {
 	var payload map[string]any
-	err := s.client.DoJSON(ctx, http.MethodGet, "/me/contacts/"+url.PathEscape(strings.TrimSpace(id)), nil, nil, DelegatedScopes, &payload)
+	err := s.client.DoJSON(ctx, http.MethodGet, s.contactsEndpoint()+"/"+url.PathEscape(strings.TrimSpace(id)), nil, nil, getContactsScopes, &payload)
 	return payload, err
 }
 
 func (s *Service) Create(ctx context.Context, payload map[string]any) (map[string]any, error) {
 	var created map[string]any
-	err := s.client.DoJSON(ctx, http.MethodPost, "/me/contacts", nil, payload, DelegatedScopes, &created)
+	err := s.client.DoJSON(ctx, http.MethodPost, s.contactsEndpoint(), nil, payload, createContactsScopes, &created)
 	return created, err
 }
 
 func (s *Service) Update(ctx context.Context, id string, payload map[string]any) error {
-	_, _, err := s.client.Do(ctx, http.MethodPatch, "/me/contacts/"+url.PathEscape(strings.TrimSpace(id)), nil, payload, DelegatedScopes, nil)
+	_, _, err := s.client.Do(ctx, http.MethodPatch, s.contactsEndpoint()+"/"+url.PathEscape(strings.TrimSpace(id)), nil, payload, updateContactsScopes, nil)
 	return err
 }
 
 func (s *Service) Delete(ctx context.Context, id string) error {
-	_, _, err := s.client.Do(ctx, http.MethodDelete, "/me/contacts/"+url.PathEscape(strings.TrimSpace(id)), nil, nil, DelegatedScopes, nil)
+	_, _, err := s.client.Do(ctx, http.MethodDelete, s.contactsEndpoint()+"/"+url.PathEscape(strings.TrimSpace(id)), nil, nil, deleteContactsScopes, nil)
 	return err
+}
+
+func (s *Service) contactsEndpoint() string {
+	if s.appOnlyUser != "" {
+		return "/users/" + url.PathEscape(s.appOnlyUser) + "/contacts"
+	}
+	return "/me/contacts"
 }
 
 func decodeValuePage(body []byte) ([]map[string]any, string, error) {

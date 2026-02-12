@@ -8,15 +8,17 @@ import (
 )
 
 type ProfileRecord struct {
-	Name      string `json:"name"`
-	Audience  string `json:"audience"`
-	ClientID  string `json:"client_id"`
-	Authority string `json:"authority,omitempty"`
-	TenantID  string `json:"tenant_id,omitempty"`
-	AccountID string `json:"account_id,omitempty"`
-	Username  string `json:"username,omitempty"`
-	AuthMode  string `json:"auth_mode,omitempty"`
-	Active    bool   `json:"active,omitempty"`
+	Name                    string   `json:"name"`
+	Audience                string   `json:"audience"`
+	ClientID                string   `json:"client_id"`
+	Authority               string   `json:"authority,omitempty"`
+	TenantID                string   `json:"tenant_id,omitempty"`
+	AccountID               string   `json:"account_id,omitempty"`
+	Username                string   `json:"username,omitempty"`
+	AuthMode                string   `json:"auth_mode,omitempty"`
+	DelegatedScopeWorkloads []string `json:"delegated_scope_workloads,omitempty"`
+	AppOnlyUser             string   `json:"app_only_user,omitempty"`
+	Active                  bool     `json:"active,omitempty"`
 }
 
 type File struct {

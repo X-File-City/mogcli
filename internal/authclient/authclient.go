@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/jared/mogcli/internal/config"
+	"github.com/jaredpalmer/mogcli/internal/config"
 )
 
 type contextKey struct{}

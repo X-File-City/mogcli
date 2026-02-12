@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jared/mogcli/internal/config"
-	"github.com/jared/mogcli/internal/errfmt"
-	"github.com/jared/mogcli/internal/profile"
+	"github.com/jaredpalmer/mogcli/internal/config"
+	"github.com/jaredpalmer/mogcli/internal/errfmt"
+	"github.com/jaredpalmer/mogcli/internal/profile"
 )
 
 func TestValidateCapability(t *testing.T) {
@@ -29,14 +29,12 @@ func TestValidateCapability(t *testing.T) {
 			capability: capMailList,
 		},
 		{
-			name: "enterprise app-only mail list is blocked",
+			name: "enterprise app-only mail list is allowed",
 			record: config.ProfileRecord{
 				Audience: profile.AudienceEnterprise,
 				AuthMode: profile.AuthModeAppOnly,
 			},
-			capability:   capMailList,
-			wantError:    true,
-			wantContains: "requires delegated auth",
+			capability: capMailList,
 		},
 		{
 			name: "enterprise app-only groups list is allowed",
@@ -55,6 +53,26 @@ func TestValidateCapability(t *testing.T) {
 			capability:   capGroupsList,
 			wantError:    true,
 			wantContains: "requires an enterprise profile",
+		},
+		{
+			name: "enterprise app-only calendar list is blocked",
+			record: config.ProfileRecord{
+				Audience: profile.AudienceEnterprise,
+				AuthMode: profile.AuthModeAppOnly,
+			},
+			capability:   capCalendarList,
+			wantError:    true,
+			wantContains: "calendar commands are not supported in app-only mode",
+		},
+		{
+			name: "enterprise app-only tasks delete is blocked",
+			record: config.ProfileRecord{
+				Audience: profile.AudienceEnterprise,
+				AuthMode: profile.AuthModeAppOnly,
+			},
+			capability:   capTasksDelete,
+			wantError:    true,
+			wantContains: "tasks commands are not supported in app-only mode",
 		},
 		{
 			name: "enterprise delegated tasks delete is allowed",
@@ -91,4 +109,87 @@ func TestValidateCapability(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestResolveAppOnlyTargetUser(t *testing.T) {
+	t.Parallel()
+
+	t.Run("delegated rejects user override", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := resolveAppOnlyTargetUser(config.ProfileRecord{
+			AuthMode: profile.AuthModeDelegated,
+		}, "person@example.com")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+
+		var exitErr *ExitError
+		if !errors.As(err, &exitErr) || exitErr.Code != 2 {
+			t.Fatalf("expected usage ExitError code 2, got %v", err)
+		}
+	})
+
+	t.Run("delegated without override returns empty target", func(t *testing.T) {
+		t.Parallel()
+
+		target, err := resolveAppOnlyTargetUser(config.ProfileRecord{
+			AuthMode: profile.AuthModeDelegated,
+		}, "")
+		if err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+		if target != "" {
+			t.Fatalf("expected empty target, got %q", target)
+		}
+	})
+
+	t.Run("app-only uses override before profile default", func(t *testing.T) {
+		t.Parallel()
+
+		target, err := resolveAppOnlyTargetUser(config.ProfileRecord{
+			AuthMode:    profile.AuthModeAppOnly,
+			AppOnlyUser: "default@example.com",
+		}, "override@example.com")
+		if err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+		if target != "override@example.com" {
+			t.Fatalf("expected override target, got %q", target)
+		}
+	})
+
+	t.Run("app-only uses profile default when override empty", func(t *testing.T) {
+		t.Parallel()
+
+		target, err := resolveAppOnlyTargetUser(config.ProfileRecord{
+			AuthMode:    profile.AuthModeAppOnly,
+			AppOnlyUser: "default@example.com",
+		}, "")
+		if err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+		if target != "default@example.com" {
+			t.Fatalf("expected profile default target, got %q", target)
+		}
+	})
+
+	t.Run("app-only requires target user", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := resolveAppOnlyTargetUser(config.ProfileRecord{
+			AuthMode: profile.AuthModeAppOnly,
+		}, "")
+		if err == nil {
+			t.Fatal("expected error")
+		}
+
+		var userErr *errfmt.UserFacingError
+		if !errors.As(err, &userErr) {
+			t.Fatalf("expected UserFacingError, got %T", err)
+		}
+		if !strings.Contains(strings.ToLower(err.Error()), "require a target user") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
 }

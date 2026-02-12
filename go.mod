@@ -1,4 +1,4 @@
-module github.com/jared/mogcli
+module github.com/jaredpalmer/mogcli
 
 go 1.26
 

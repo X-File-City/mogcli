@@ -9,27 +9,32 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/jared/mogcli/internal/graph"
+	"github.com/jaredpalmer/mogcli/internal/graph"
 )
 
-var DelegatedScopes = []string{"Files.Read", "Files.ReadWrite"}
+var listOneDriveScopes = []string{"Files.Read"}
+var getOneDriveScopes = []string{"Files.Read"}
+var putOneDriveScopes = []string{"Files.ReadWrite"}
+var mkdirOneDriveScopes = []string{"Files.ReadWrite"}
+var removeOneDriveScopes = []string{"Files.ReadWrite"}
 
 type Service struct {
-	client *graph.Client
+	client      *graph.Client
+	appOnlyUser string
 }
 
-func New(client *graph.Client) *Service {
-	return &Service{client: client}
+func New(client *graph.Client, appOnlyUser string) *Service {
+	return &Service{client: client, appOnlyUser: strings.TrimSpace(appOnlyUser)}
 }
 
 func (s *Service) List(ctx context.Context, remotePath string, max int, page string) ([]map[string]any, string, error) {
 	if strings.TrimSpace(page) != "" {
-		return s.client.Paginate(ctx, strings.TrimSpace(page), nil, DelegatedScopes, max)
+		return s.client.Paginate(ctx, strings.TrimSpace(page), nil, listOneDriveScopes, max)
 	}
 
-	endpoint := "/me/drive/root/children"
+	endpoint := s.driveEndpoint() + "/root/children"
 	if cleaned := normalizeRemotePath(remotePath); cleaned != "/" {
-		endpoint = "/me/drive/root:" + cleaned + ":/children"
+		endpoint = s.driveEndpoint() + "/root:" + cleaned + ":/children"
 	}
 
 	query := url.Values{}
@@ -37,12 +42,12 @@ func (s *Service) List(ctx context.Context, remotePath string, max int, page str
 		query.Set("$top", fmt.Sprintf("%d", max))
 	}
 
-	return s.client.Paginate(ctx, endpoint, query, DelegatedScopes, max)
+	return s.client.Paginate(ctx, endpoint, query, listOneDriveScopes, max)
 }
 
 func (s *Service) Get(ctx context.Context, remotePath string) ([]byte, error) {
-	endpoint := "/me/drive/root:" + normalizeRemotePath(remotePath) + ":/content"
-	_, body, err := s.client.Do(ctx, http.MethodGet, endpoint, nil, nil, DelegatedScopes, nil)
+	endpoint := s.driveEndpoint() + "/root:" + normalizeRemotePath(remotePath) + ":/content"
+	_, body, err := s.client.Do(ctx, http.MethodGet, endpoint, nil, nil, getOneDriveScopes, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -51,8 +56,8 @@ func (s *Service) Get(ctx context.Context, remotePath string) ([]byte, error) {
 }
 
 func (s *Service) Put(ctx context.Context, remotePath string, content []byte) error {
-	endpoint := "/me/drive/root:" + normalizeRemotePath(remotePath) + ":/content"
-	_, _, err := s.client.Do(ctx, http.MethodPut, endpoint, nil, content, DelegatedScopes, nil)
+	endpoint := s.driveEndpoint() + "/root:" + normalizeRemotePath(remotePath) + ":/content"
+	_, _, err := s.client.Do(ctx, http.MethodPut, endpoint, nil, content, putOneDriveScopes, nil)
 	return err
 }
 
@@ -67,9 +72,9 @@ func (s *Service) Mkdir(ctx context.Context, remotePath string) error {
 		return fmt.Errorf("invalid folder path: %s", remotePath)
 	}
 
-	endpoint := "/me/drive/root/children"
+	endpoint := s.driveEndpoint() + "/root/children"
 	if parent != "/" {
-		endpoint = "/me/drive/root:" + parent + ":/children"
+		endpoint = s.driveEndpoint() + "/root:" + parent + ":/children"
 	}
 
 	payload := map[string]any{
@@ -78,14 +83,21 @@ func (s *Service) Mkdir(ctx context.Context, remotePath string) error {
 		"@microsoft.graph.conflictBehavior": "rename",
 	}
 
-	_, _, err := s.client.Do(ctx, http.MethodPost, endpoint, nil, payload, DelegatedScopes, nil)
+	_, _, err := s.client.Do(ctx, http.MethodPost, endpoint, nil, payload, mkdirOneDriveScopes, nil)
 	return err
 }
 
 func (s *Service) Remove(ctx context.Context, remotePath string) error {
-	endpoint := "/me/drive/root:" + normalizeRemotePath(remotePath)
-	_, _, err := s.client.Do(ctx, http.MethodDelete, endpoint, nil, nil, DelegatedScopes, nil)
+	endpoint := s.driveEndpoint() + "/root:" + normalizeRemotePath(remotePath)
+	_, _, err := s.client.Do(ctx, http.MethodDelete, endpoint, nil, nil, removeOneDriveScopes, nil)
 	return err
+}
+
+func (s *Service) driveEndpoint() string {
+	if s.appOnlyUser != "" {
+		return "/users/" + url.PathEscape(s.appOnlyUser) + "/drive"
+	}
+	return "/me/drive"
 }
 
 func normalizeRemotePath(p string) string {

@@ -9,11 +9,15 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/jared/mogcli/internal/errfmt"
-	"github.com/jared/mogcli/internal/graph"
+	"github.com/jaredpalmer/mogcli/internal/errfmt"
+	"github.com/jaredpalmer/mogcli/internal/graph"
 )
 
-var DelegatedScopes = []string{"Tasks.Read", "Tasks.ReadWrite"}
+var listTaskScopes = []string{"Tasks.Read"}
+var getTaskScopes = []string{"Tasks.Read"}
+var createTaskScopes = []string{"Tasks.ReadWrite"}
+var updateTaskScopes = []string{"Tasks.ReadWrite"}
+var deleteTaskScopes = []string{"Tasks.ReadWrite"}
 
 type Service struct {
 	client *graph.Client
@@ -24,7 +28,7 @@ func New(client *graph.Client) *Service {
 }
 
 func (s *Service) Lists(ctx context.Context) ([]map[string]any, error) {
-	_, body, err := s.client.Do(ctx, http.MethodGet, "/me/todo/lists", nil, nil, DelegatedScopes, nil)
+	_, body, err := s.client.Do(ctx, http.MethodGet, "/me/todo/lists", nil, nil, listTaskScopes, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -44,7 +48,7 @@ func (s *Service) ListTasks(ctx context.Context, listID string, max int, page st
 		query = nil
 	}
 
-	_, body, err := s.client.Do(ctx, http.MethodGet, path, query, nil, DelegatedScopes, nil)
+	_, body, err := s.client.Do(ctx, http.MethodGet, path, query, nil, listTaskScopes, nil)
 	if err != nil {
 		return nil, "", err
 	}
@@ -61,26 +65,26 @@ func (s *Service) ListTasks(ctx context.Context, listID string, max int, page st
 func (s *Service) GetTask(ctx context.Context, listID string, taskID string) (map[string]any, error) {
 	path := "/me/todo/lists/" + url.PathEscape(strings.TrimSpace(listID)) + "/tasks/" + url.PathEscape(strings.TrimSpace(taskID))
 	var payload map[string]any
-	err := s.client.DoJSON(ctx, http.MethodGet, path, nil, nil, DelegatedScopes, &payload)
+	err := s.client.DoJSON(ctx, http.MethodGet, path, nil, nil, getTaskScopes, &payload)
 	return payload, err
 }
 
 func (s *Service) CreateTask(ctx context.Context, listID string, payload map[string]any) (map[string]any, error) {
 	path := "/me/todo/lists/" + url.PathEscape(strings.TrimSpace(listID)) + "/tasks"
 	var created map[string]any
-	err := s.client.DoJSON(ctx, http.MethodPost, path, nil, payload, DelegatedScopes, &created)
+	err := s.client.DoJSON(ctx, http.MethodPost, path, nil, payload, createTaskScopes, &created)
 	return created, normalizeTaskMutationError(err)
 }
 
 func (s *Service) UpdateTask(ctx context.Context, listID string, taskID string, payload map[string]any) error {
 	path := "/me/todo/lists/" + url.PathEscape(strings.TrimSpace(listID)) + "/tasks/" + url.PathEscape(strings.TrimSpace(taskID))
-	_, _, err := s.client.Do(ctx, http.MethodPatch, path, nil, payload, DelegatedScopes, nil)
+	_, _, err := s.client.Do(ctx, http.MethodPatch, path, nil, payload, updateTaskScopes, nil)
 	return normalizeTaskMutationError(err)
 }
 
 func (s *Service) DeleteTask(ctx context.Context, listID string, taskID string) error {
 	path := "/me/todo/lists/" + url.PathEscape(strings.TrimSpace(listID)) + "/tasks/" + url.PathEscape(strings.TrimSpace(taskID))
-	_, _, err := s.client.Do(ctx, http.MethodDelete, path, nil, nil, DelegatedScopes, nil)
+	_, _, err := s.client.Do(ctx, http.MethodDelete, path, nil, nil, deleteTaskScopes, nil)
 	return normalizeTaskMutationError(err)
 }
 

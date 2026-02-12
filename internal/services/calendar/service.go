@@ -8,10 +8,14 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/jared/mogcli/internal/graph"
+	"github.com/jaredpalmer/mogcli/internal/graph"
 )
 
-var DelegatedScopes = []string{"Calendars.Read", "Calendars.ReadWrite"}
+var listCalendarScopes = []string{"Calendars.Read"}
+var getCalendarScopes = []string{"Calendars.Read"}
+var createCalendarScopes = []string{"Calendars.ReadWrite"}
+var updateCalendarScopes = []string{"Calendars.ReadWrite"}
+var deleteCalendarScopes = []string{"Calendars.ReadWrite"}
 
 type Service struct {
 	client *graph.Client
@@ -39,7 +43,7 @@ func (s *Service) List(ctx context.Context, from string, to string, max int, pag
 		query = nil
 	}
 
-	_, body, err := s.client.Do(ctx, http.MethodGet, endpoint, query, nil, DelegatedScopes, headers)
+	_, body, err := s.client.Do(ctx, http.MethodGet, endpoint, query, nil, listCalendarScopes, headers)
 	if err != nil {
 		return nil, "", err
 	}
@@ -55,23 +59,23 @@ func (s *Service) List(ctx context.Context, from string, to string, max int, pag
 
 func (s *Service) Get(ctx context.Context, id string) (map[string]any, error) {
 	var payload map[string]any
-	err := s.client.DoJSON(ctx, http.MethodGet, "/me/events/"+url.PathEscape(strings.TrimSpace(id)), nil, nil, DelegatedScopes, &payload)
+	err := s.client.DoJSON(ctx, http.MethodGet, "/me/events/"+url.PathEscape(strings.TrimSpace(id)), nil, nil, getCalendarScopes, &payload)
 	return payload, err
 }
 
 func (s *Service) Create(ctx context.Context, payload map[string]any) (map[string]any, error) {
 	var created map[string]any
-	err := s.client.DoJSON(ctx, http.MethodPost, "/me/events", nil, payload, DelegatedScopes, &created)
+	err := s.client.DoJSON(ctx, http.MethodPost, "/me/events", nil, payload, createCalendarScopes, &created)
 	return created, err
 }
 
 func (s *Service) Update(ctx context.Context, id string, payload map[string]any) error {
-	_, _, err := s.client.Do(ctx, http.MethodPatch, "/me/events/"+url.PathEscape(strings.TrimSpace(id)), nil, payload, DelegatedScopes, nil)
+	_, _, err := s.client.Do(ctx, http.MethodPatch, "/me/events/"+url.PathEscape(strings.TrimSpace(id)), nil, payload, updateCalendarScopes, nil)
 	return err
 }
 
 func (s *Service) Delete(ctx context.Context, id string) error {
-	_, _, err := s.client.Do(ctx, http.MethodDelete, "/me/events/"+url.PathEscape(strings.TrimSpace(id)), nil, nil, DelegatedScopes, nil)
+	_, _, err := s.client.Do(ctx, http.MethodDelete, "/me/events/"+url.PathEscape(strings.TrimSpace(id)), nil, nil, deleteCalendarScopes, nil)
 	return err
 }
 

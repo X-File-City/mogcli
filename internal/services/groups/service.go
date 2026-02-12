@@ -8,10 +8,12 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/jared/mogcli/internal/graph"
+	"github.com/jaredpalmer/mogcli/internal/graph"
 )
 
-var DelegatedScopes = []string{"Group.Read.All", "GroupMember.Read.All"}
+var listGroupsScopes = []string{"Group.Read.All"}
+var getGroupsScopes = []string{"Group.Read.All"}
+var membersGroupsScopes = []string{"GroupMember.Read.All"}
 
 type Service struct {
 	client *graph.Client
@@ -34,7 +36,7 @@ func (s *Service) List(ctx context.Context, max int, page string) ([]map[string]
 		query = nil
 	}
 
-	_, body, err := s.client.Do(ctx, http.MethodGet, endpoint, query, nil, DelegatedScopes, nil)
+	_, body, err := s.client.Do(ctx, http.MethodGet, endpoint, query, nil, listGroupsScopes, nil)
 	if err != nil {
 		return nil, "", err
 	}
@@ -50,7 +52,7 @@ func (s *Service) List(ctx context.Context, max int, page string) ([]map[string]
 
 func (s *Service) Get(ctx context.Context, id string) (map[string]any, error) {
 	var payload map[string]any
-	err := s.client.DoJSON(ctx, http.MethodGet, "/groups/"+url.PathEscape(strings.TrimSpace(id)), nil, nil, DelegatedScopes, &payload)
+	err := s.client.DoJSON(ctx, http.MethodGet, "/groups/"+url.PathEscape(strings.TrimSpace(id)), nil, nil, getGroupsScopes, &payload)
 	return payload, err
 }
 
@@ -66,7 +68,7 @@ func (s *Service) Members(ctx context.Context, id string, max int, page string) 
 		query = nil
 	}
 
-	_, body, err := s.client.Do(ctx, http.MethodGet, endpoint, query, nil, DelegatedScopes, nil)
+	_, body, err := s.client.Do(ctx, http.MethodGet, endpoint, query, nil, membersGroupsScopes, nil)
 	if err != nil {
 		return nil, "", err
 	}

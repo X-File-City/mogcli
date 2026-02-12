@@ -2,133 +2,164 @@
 
 Microsoft 365 in your terminal.
 
-`mogcli` is a Microsoft Graph CLI for personal and enterprise workflows. It provides a consistent, scriptable interface for Outlook Mail, Calendar, Contacts, Groups, Tasks, and OneDrive.
+`mogcli` is a Microsoft Graph CLI for personal Microsoft accounts (MSA) and enterprise Microsoft Entra ID accounts. It provides scriptable commands for Mail, Calendar, Contacts, Groups, Tasks, and OneDrive.
 
-## Features
+## What mogcli supports
 
-- First-class workloads: Outlook Mail, Calendar, Contacts, Groups, Tasks (Microsoft To Do), and OneDrive.
-- Profile-based auth for both consumer and enterprise accounts.
-- Single active profile model for predictable command behavior.
-- Delegated and app-only auth modes (enterprise app-only).
-- Stable `--json` and `--plain` output modes for scripting.
-- Unstyled plain-text terminal output (no color pipeline).
-- Built-in retry/backoff and clear, actionable API error output.
+- Multiple profiles with exactly one active profile at a time.
+- Consumer and enterprise audiences.
+- Delegated user auth and enterprise app-only auth.
+- Stable scripting output modes: `--json` and `--plain`.
+- Interactive auth wizard (`mog auth`) plus non-interactive login (`mog auth login`).
+- Per-command scope requests in delegated mode (progressive consent).
+
+### Workload support matrix
+
+| Workload | Delegated | App-only |
+|---|---|---|
+| Mail | Yes | Yes (enterprise, requires target user) |
+| Calendar | Yes | No |
+| Contacts | Yes | Yes (enterprise, requires target user) |
+| Groups | Enterprise only | Enterprise only |
+| Tasks (Microsoft To Do) | Yes | No |
+| OneDrive | Yes | Yes (enterprise, requires target user) |
+
+Notes:
+
+- App-only mode is enterprise-only.
+- Calendar and tasks are intentionally blocked in app-only mode.
+- Groups are intentionally blocked for consumer profiles.
 
 ## Install
 
-Homebrew:
+### Option 1: Build from source
 
 ```bash
-brew install mogcli/tap/mog
-```
-
-Prebuilt binaries:
-
-- Download from Releases and place `mog` on your `PATH`.
-
-Build from source:
-
-```bash
-git clone https://github.com/<your-org>/mogcli.git
+git clone https://github.com/jaredpalmer/mogcli.git
 cd mogcli
 go build -o bin/mog ./cmd/mog
+./bin/mog --help
 ```
 
-## Quick Start
-
-Register two apps in Microsoft Entra ID:
-
-1. Consumer app registration (MSA audience).
-2. Enterprise app registration (work/school audience).
-
-Then login profiles:
+### Option 2: go install
 
 ```bash
-# Consumer (MSA)
+go install github.com/jaredpalmer/mogcli/cmd/mog@latest
+mog --help
+```
+
+## Microsoft app setup prerequisites
+
+Before login, create app registrations in Microsoft Entra:
+
+1. Consumer app registration (for MSA audience).
+2. Enterprise app registration (for work/school audience).
+
+For delegated login:
+
+1. Enable public client flow in app Authentication settings.
+2. Add delegated Graph permissions for the workloads you plan to use.
+
+For app-only login:
+
+1. Use an enterprise app registration.
+2. Add required application permissions.
+3. Grant admin consent.
+4. Create a client secret.
+
+## Quick start
+
+### 1) Interactive setup (recommended)
+
+```bash
+mog auth
+```
+
+This wizard configures the profile and starts delegated device-code login.
+
+### 2) Scripted delegated login
+
+Consumer profile:
+
+```bash
 mog auth login \
   --profile personal \
   --audience consumer \
-  --client-id <consumer-client-id>
+  --client-id <consumer-client-id> \
+  --scope-workloads mail,calendar,contacts,tasks,onedrive
+```
 
-# Enterprise delegated
+Enterprise delegated profile:
+
+```bash
 mog auth login \
   --profile work \
   --audience enterprise \
   --client-id <enterprise-client-id> \
-  --tenant <tenant-id-or-domain>
+  --tenant <tenant-id-or-domain> \
+  --scope-workloads mail,calendar,contacts,tasks,onedrive,groups
 ```
 
-Switch active profile:
+### 3) Scripted app-only login (enterprise)
 
 ```bash
-mog auth use personal
-mog auth whoami
-```
+export MOG_CLIENT_SECRET="<client-secret-value>"
 
-Run commands:
-
-```bash
-mog mail list --max 20
-mog calendar list --from today --to tomorrow
-mog onedrive ls --path /
-```
-
-## Auth Model
-
-- Separate consumer and enterprise app registrations.
-- Multiple saved profiles.
-- Exactly one active profile at a time.
-- Profile-isolated token/cache storage.
-- Enterprise-only app-only mode.
-
-App-only login example:
-
-```bash
 mog auth login \
   --profile work-app \
   --audience enterprise \
   --mode app-only \
   --client-id <enterprise-client-id> \
   --tenant <tenant-id-or-domain> \
+  --app-only-user user@contoso.com \
   --client-secret-env MOG_CLIENT_SECRET
 ```
 
-## Commands
-
-Top-level groups:
-
-- `mog auth`
-- `mog mail`
-- `mog calendar`
-- `mog contacts`
-- `mog groups`
-- `mog tasks`
-- `mog onedrive`
-- `mog config`
-
-Use `--help` at any level:
+### 4) Switch and inspect profiles
 
 ```bash
-mog --help
-mog mail --help
-mog onedrive put --help
+mog auth accounts
+mog auth use work
+mog auth whoami
 ```
 
-## Examples
+For one-off command routing without switching active profile:
+
+```bash
+mog --use-profile work mail list --max 10
+```
+
+## Command overview
+
+- `mog auth login|logout|accounts|use|whoami`
+- `mog mail list|get|send`
+- `mog calendar list|get|create|update|delete`
+- `mog contacts list|get|create|update|delete`
+- `mog groups list|get|members`
+- `mog tasks lists|list|get|create|update|complete|delete`
+- `mog onedrive ls|get|put|mkdir|rm`
+- `mog config get|keys|set|unset|list|path`
+- `mog completion <shell>`
+
+## Usage examples
 
 Mail:
 
 ```bash
-mog mail list --query "from:alerts@example.com" --max 50
+mog mail list --max 50 --query "from:alerts@example.com"
 mog mail get <message-id>
-mog mail send --to "dev@contoso.com" --subject "Deploy complete" --body "Finished."
+mog mail send --to dev@contoso.com --subject "Deploy complete" --body "Finished."
 ```
 
 Calendar:
 
 ```bash
-mog calendar list --from 2026-02-12 --to 2026-02-19
-mog calendar create --subject "Planning" --start "2026-02-13T16:00:00-08:00" --end "2026-02-13T16:30:00-08:00"
+mog calendar list --from 2026-02-12 --to 2026-02-19 --max 100
+mog calendar create \
+  --subject "Planning" \
+  --start "2026-02-13T16:00:00-08:00" \
+  --end "2026-02-13T16:30:00-08:00" \
+  --body "Weekly sync"
 ```
 
 Contacts:
@@ -142,98 +173,105 @@ Groups:
 
 ```bash
 mog groups list --max 100
-mog groups members <group-id>
+mog groups members <group-id> --max 100
 ```
 
 Tasks:
 
 ```bash
 mog tasks lists
-mog tasks list --list <list-id>
+mog tasks list --list <list-id> --max 100
+mog tasks create --list <list-id> --title "Follow up"
 mog tasks complete --list <list-id> --task <task-id>
 ```
 
 OneDrive:
 
 ```bash
-mog onedrive ls --path /
-# resume from a prior next token
-mog onedrive ls --page "https://graph.microsoft.com/v1.0/me/drive/root/children?$skiptoken=..."
-# equivalent alias
-mog onedrive ls --next-token "https://graph.microsoft.com/v1.0/me/drive/root/children?$skiptoken=..."
+mog onedrive ls --path / --max 100
 mog onedrive put ./report.pdf --path /Reports/report.pdf
 mog onedrive get /Reports/report.pdf --out ./report.pdf
+mog onedrive mkdir --path /Reports/Archive
+mog onedrive rm --path /Reports/old-report.pdf
 ```
 
-Pagination resume:
+App-only target user override (mail/contacts/onedrive):
 
 ```bash
-mog groups list --max 50
-# copy next value from JSON output or next-page hint:
-mog groups list --page "https://graph.microsoft.com/v1.0/groups?$skiptoken=..."
+mog mail list --user user@contoso.com --max 20
+mog onedrive ls --user user@contoso.com --path /
 ```
 
-## Output Modes
+## Pagination and scripting
 
-All terminal output is unstyled plain text (no color/styling pipeline).
-Default output remains human-readable table/text.
+Most list commands support `--page` to resume from a next-page token.
 
-- `--json`: structured JSON output.
-- `--plain`: stable parseable plain output (TSV).
+```bash
+mog groups list --max 50 --json
+mog groups list --page "<next-token-url>"
+```
+
+`--next-token` is also accepted as an alias for pagination resume flags where supported.
+
+Output modes:
+
+- `--json`: structured output for tooling.
+- `--plain`: stable tab-separated output for shell scripts.
 
 Examples:
 
 ```bash
 mog mail list --json | jq '.messages[0]'
-mog tasks list --plain
+mog tasks list --list <list-id> --plain
 ```
 
-## Configuration
+## Configuration and secrets
 
-Configuration and state are stored under the user config directory (platform-specific), including:
+Show config path:
 
-- CLI config
-- profile metadata
-- keyring/keychain backend settings
+```bash
+mog config path
+```
 
-Secrets and tokens are stored in OS keychain/keyring when available, with secure fallback behavior for headless environments.
+Show editable config keys:
 
-## Permissions and Consent
+```bash
+mog config keys
+```
 
-`mogcli` uses least-privilege scopes per command group. Some Graph capabilities differ by account type or auth mode:
+Current keys:
 
-- Groups are enterprise/work accounts only.
-- Current `/me`-based commands (`mail`, `calendar`, `contacts`, `tasks`, `onedrive`) are delegated-only and fail fast in app-only mode with guidance to switch to a delegated profile.
-- App-only support is limited to workloads/endpoints that Graph allows, and broader `/me` routing substitutions are planned for a later phase.
+- `timezone`
+- `keyring_backend`
 
-`mog` help output includes required scopes for each command.
-
-## Exit Codes
-
-- `0`: success
-- `1`: runtime/API/auth failure
-- `2`: usage/argument/parse error
+Profile metadata is stored in config. Tokens and secrets are stored via keychain/keyring backends.
 
 ## Troubleshooting
 
-Show active profile and auth state:
+No active profile:
 
 ```bash
-mog auth whoami
 mog auth accounts
+mog auth use <profile>
 ```
 
-Enable verbose logging:
+Refresh delegated login:
+
+```bash
+mog auth login --profile <profile> --audience enterprise --client-id <id> --scope-workloads mail,calendar,contacts,tasks,onedrive
+```
+
+Logout and reset profile auth state:
+
+```bash
+mog auth logout --profile <profile>
+```
+
+Verbose mode:
 
 ```bash
 mog --verbose mail list
 ```
-
-Common fixes:
-
-- Re-auth when scopes changed: `mog auth login --profile <name> --force-consent`
-- Switch profile: `mog auth use <profile>`
-- Reset session for a profile: `mog auth logout --profile <name>`
 
 ## Development
 
@@ -242,15 +280,8 @@ go test ./...
 go run ./cmd/mog --help
 ```
 
-Repository docs:
-
-- `docs/` for architecture, migration, and contributor notes.
-- `opensrc/` for local reference sources used during implementation.
+Additional project docs are in `docs/`.
 
 ## License
 
 MIT
-
-## Author
-
-- Jared Palmer (https://x.com/jaredpalmer)

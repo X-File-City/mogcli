@@ -13,7 +13,7 @@ TEST_PKGS := ./cmd/... ./internal/...
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 COMMIT := $(shell git rev-parse --short=12 HEAD 2>/dev/null || echo "")
 DATE := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
-LDFLAGS := -X github.com/jared/mogcli/internal/cmd.version=$(VERSION) -X github.com/jared/mogcli/internal/cmd.commit=$(COMMIT) -X github.com/jared/mogcli/internal/cmd.date=$(DATE)
+LDFLAGS := -X github.com/jaredpalmer/mogcli/internal/cmd.version=$(VERSION) -X github.com/jaredpalmer/mogcli/internal/cmd.commit=$(COMMIT) -X github.com/jaredpalmer/mogcli/internal/cmd.date=$(DATE)
 
 ifneq ($(filter mog,$(MAKECMDGOALS)),)
 RUN_ARGS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))

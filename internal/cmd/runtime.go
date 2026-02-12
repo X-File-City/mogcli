@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/jared/mogcli/internal/auth"
-	"github.com/jared/mogcli/internal/config"
-	"github.com/jared/mogcli/internal/errfmt"
-	"github.com/jared/mogcli/internal/graph"
-	"github.com/jared/mogcli/internal/profile"
+	"github.com/jaredpalmer/mogcli/internal/auth"
+	"github.com/jaredpalmer/mogcli/internal/config"
+	"github.com/jaredpalmer/mogcli/internal/errfmt"
+	"github.com/jaredpalmer/mogcli/internal/graph"
+	"github.com/jaredpalmer/mogcli/internal/profile"
 )
 
 type runtimeEnv struct {
@@ -54,7 +54,8 @@ const (
 const (
 	enterpriseOnlyProfileMessage = "This command requires an enterprise profile. Use `mog auth use <enterprise-profile>`."
 	appOnlyEnterpriseOnlyMessage = "App-only mode is enterprise-only."
-	meDelegatedOnlyMessage       = "This command requires delegated auth because it uses `/me` Microsoft Graph endpoints. Use a delegated profile or re-login without `--mode app-only`."
+	calendarAppOnlyMessage       = "Calendar commands are not supported in app-only mode. Use a delegated profile (`mog auth use <profile>`) or re-login without `--mode app-only`."
+	tasksAppOnlyMessage          = "Tasks commands are not supported in app-only mode. Use a delegated profile (`mog auth use <profile>`) or re-login without `--mode app-only`."
 )
 
 type capabilityRule struct {
@@ -65,37 +66,37 @@ type capabilityRule struct {
 }
 
 var capabilityRules = map[runtimeCapability]capabilityRule{
-	capMailList:       delegatedMeRule(),
-	capMailGet:        delegatedMeRule(),
-	capMailSend:       delegatedMeRule(),
-	capCalendarList:   delegatedMeRule(),
-	capCalendarGet:    delegatedMeRule(),
-	capCalendarCreate: delegatedMeRule(),
-	capCalendarUpdate: delegatedMeRule(),
-	capCalendarDelete: delegatedMeRule(),
-	capContactsList:   delegatedMeRule(),
-	capContactsGet:    delegatedMeRule(),
-	capContactsCreate: delegatedMeRule(),
-	capContactsUpdate: delegatedMeRule(),
-	capContactsDelete: delegatedMeRule(),
+	capMailList:       delegatedOrAppOnlyRule(),
+	capMailGet:        delegatedOrAppOnlyRule(),
+	capMailSend:       delegatedOrAppOnlyRule(),
+	capCalendarList:   delegatedOnlyRule(calendarAppOnlyMessage),
+	capCalendarGet:    delegatedOnlyRule(calendarAppOnlyMessage),
+	capCalendarCreate: delegatedOnlyRule(calendarAppOnlyMessage),
+	capCalendarUpdate: delegatedOnlyRule(calendarAppOnlyMessage),
+	capCalendarDelete: delegatedOnlyRule(calendarAppOnlyMessage),
+	capContactsList:   delegatedOrAppOnlyRule(),
+	capContactsGet:    delegatedOrAppOnlyRule(),
+	capContactsCreate: delegatedOrAppOnlyRule(),
+	capContactsUpdate: delegatedOrAppOnlyRule(),
+	capContactsDelete: delegatedOrAppOnlyRule(),
 	capGroupsList:     groupsRule(),
 	capGroupsGet:      groupsRule(),
 	capGroupsMembers:  groupsRule(),
-	capTasksLists:     delegatedMeRule(),
-	capTasksList:      delegatedMeRule(),
-	capTasksGet:       delegatedMeRule(),
-	capTasksCreate:    delegatedMeRule(),
-	capTasksUpdate:    delegatedMeRule(),
-	capTasksComplete:  delegatedMeRule(),
-	capTasksDelete:    delegatedMeRule(),
-	capOneDriveLS:     delegatedMeRule(),
-	capOneDriveGet:    delegatedMeRule(),
-	capOneDrivePut:    delegatedMeRule(),
-	capOneDriveMkdir:  delegatedMeRule(),
-	capOneDriveRM:     delegatedMeRule(),
+	capTasksLists:     delegatedOnlyRule(tasksAppOnlyMessage),
+	capTasksList:      delegatedOnlyRule(tasksAppOnlyMessage),
+	capTasksGet:       delegatedOnlyRule(tasksAppOnlyMessage),
+	capTasksCreate:    delegatedOnlyRule(tasksAppOnlyMessage),
+	capTasksUpdate:    delegatedOnlyRule(tasksAppOnlyMessage),
+	capTasksComplete:  delegatedOnlyRule(tasksAppOnlyMessage),
+	capTasksDelete:    delegatedOnlyRule(tasksAppOnlyMessage),
+	capOneDriveLS:     delegatedOrAppOnlyRule(),
+	capOneDriveGet:    delegatedOrAppOnlyRule(),
+	capOneDrivePut:    delegatedOrAppOnlyRule(),
+	capOneDriveMkdir:  delegatedOrAppOnlyRule(),
+	capOneDriveRM:     delegatedOrAppOnlyRule(),
 }
 
-func delegatedMeRule() capabilityRule {
+func delegatedOnlyRule(message string) capabilityRule {
 	return capabilityRule{
 		allowedAudiences: []string{
 			profile.AudienceConsumer,
@@ -104,7 +105,20 @@ func delegatedMeRule() capabilityRule {
 		allowedAuthModes: []string{
 			profile.AuthModeDelegated,
 		},
-		unsupportedAuthModeMessage: meDelegatedOnlyMessage,
+		unsupportedAuthModeMessage: message,
+	}
+}
+
+func delegatedOrAppOnlyRule() capabilityRule {
+	return capabilityRule{
+		allowedAudiences: []string{
+			profile.AudienceConsumer,
+			profile.AudienceEnterprise,
+		},
+		allowedAuthModes: []string{
+			profile.AuthModeDelegated,
+			profile.AuthModeAppOnly,
+		},
 	}
 }
 
@@ -147,7 +161,15 @@ func resolveRuntime(ctx context.Context, capability runtimeCapability) (*runtime
 			}
 			return authManager.AcquireAppOnlyToken(ctx, activeProfile.Name, activeProfile.ClientID, activeProfile.Authority)
 		default:
-			return authManager.AcquireDelegatedToken(ctx, activeProfile.Name, activeProfile.ClientID, activeProfile.Authority, scopes)
+			return authManager.AcquireDelegatedToken(
+				ctx,
+				activeProfile.Name,
+				activeProfile.ClientID,
+				activeProfile.Authority,
+				scopes,
+				activeProfile.AccountID,
+				activeProfile.TenantID,
+			)
 		}
 	})
 
@@ -214,6 +236,31 @@ func containsRuleValue(values []string, target string) bool {
 	}
 
 	return false
+}
+
+func resolveAppOnlyTargetUser(activeProfile config.ProfileRecord, override string) (string, error) {
+	override = strings.TrimSpace(override)
+	authMode := normalizeAuthMode(activeProfile.AuthMode)
+	if override != "" && authMode != profile.AuthModeAppOnly {
+		return "", usage("--user is only supported for app-only profiles")
+	}
+
+	if authMode != profile.AuthModeAppOnly {
+		return "", nil
+	}
+
+	target := override
+	if target == "" {
+		target = strings.TrimSpace(activeProfile.AppOnlyUser)
+	}
+	if target == "" {
+		return "", errfmt.NewUserFacingError(
+			"App-only commands require a target user. Set `--user` or configure a profile default with `mog auth login --app-only-user`.",
+			nil,
+		)
+	}
+
+	return target, nil
 }
 
 func defaultAuthority(audience string, tenant string, explicit string) string {

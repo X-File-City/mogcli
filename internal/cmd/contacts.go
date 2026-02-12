@@ -6,8 +6,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/jared/mogcli/internal/outfmt"
-	"github.com/jared/mogcli/internal/services/contacts"
+	"github.com/jaredpalmer/mogcli/internal/outfmt"
+	"github.com/jaredpalmer/mogcli/internal/services/contacts"
 )
 
 type ContactsCmd struct {
@@ -21,10 +21,15 @@ type ContactsCmd struct {
 type ContactsListCmd struct {
 	Max  int    `name:"max" default:"100" help:"Maximum contacts"`
 	Page string `name:"page" aliases:"next-token" help:"Resume from next page token"`
+	User string `name:"user" help:"App-only target user override (UPN or user ID)"`
 }
 
 func (c *ContactsListCmd) Run(ctx context.Context) error {
 	rt, err := resolveRuntime(ctx, capContactsList)
+	if err != nil {
+		return err
+	}
+	targetUser, err := resolveAppOnlyTargetUser(rt.Profile, c.User)
 	if err != nil {
 		return err
 	}
@@ -33,7 +38,7 @@ func (c *ContactsListCmd) Run(ctx context.Context) error {
 		return err
 	}
 
-	items, next, err := contacts.New(rt.Graph).List(ctx, c.Max, page)
+	items, next, err := contacts.New(rt.Graph, targetUser).List(ctx, c.Max, page)
 	if err != nil {
 		return err
 	}
@@ -48,7 +53,8 @@ func (c *ContactsListCmd) Run(ctx context.Context) error {
 }
 
 type ContactsGetCmd struct {
-	ID string `arg:"" required:"" help:"Contact ID"`
+	ID   string `arg:"" required:"" help:"Contact ID"`
+	User string `name:"user" help:"App-only target user override (UPN or user ID)"`
 }
 
 func (c *ContactsGetCmd) Run(ctx context.Context) error {
@@ -56,8 +62,12 @@ func (c *ContactsGetCmd) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	targetUser, err := resolveAppOnlyTargetUser(rt.Profile, c.User)
+	if err != nil {
+		return err
+	}
 
-	item, err := contacts.New(rt.Graph).Get(ctx, c.ID)
+	item, err := contacts.New(rt.Graph, targetUser).Get(ctx, c.ID)
 	if err != nil {
 		return err
 	}
@@ -73,10 +83,15 @@ type ContactsCreateCmd struct {
 	DisplayName string `name:"display-name" required:"" help:"Contact display name"`
 	Email       string `name:"email" help:"Primary email"`
 	MobilePhone string `name:"mobile-phone" help:"Mobile phone"`
+	User        string `name:"user" help:"App-only target user override (UPN or user ID)"`
 }
 
 func (c *ContactsCreateCmd) Run(ctx context.Context) error {
 	rt, err := resolveRuntime(ctx, capContactsCreate)
+	if err != nil {
+		return err
+	}
+	targetUser, err := resolveAppOnlyTargetUser(rt.Profile, c.User)
 	if err != nil {
 		return err
 	}
@@ -89,7 +104,7 @@ func (c *ContactsCreateCmd) Run(ctx context.Context) error {
 		payload["mobilePhone"] = c.MobilePhone
 	}
 
-	item, err := contacts.New(rt.Graph).Create(ctx, payload)
+	item, err := contacts.New(rt.Graph, targetUser).Create(ctx, payload)
 	if err != nil {
 		return err
 	}
@@ -106,6 +121,7 @@ type ContactsUpdateCmd struct {
 	DisplayName string `name:"display-name" help:"Contact display name"`
 	Email       string `name:"email" help:"Primary email"`
 	MobilePhone string `name:"mobile-phone" help:"Mobile phone"`
+	User        string `name:"user" help:"App-only target user override (UPN or user ID)"`
 }
 
 func (c *ContactsUpdateCmd) Run(ctx context.Context) error {
@@ -131,7 +147,11 @@ func (c *ContactsUpdateCmd) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := contacts.New(rt.Graph).Update(ctx, c.ID, payload); err != nil {
+	targetUser, err := resolveAppOnlyTargetUser(rt.Profile, c.User)
+	if err != nil {
+		return err
+	}
+	if err := contacts.New(rt.Graph, targetUser).Update(ctx, c.ID, payload); err != nil {
 		return err
 	}
 
@@ -143,7 +163,8 @@ func (c *ContactsUpdateCmd) Run(ctx context.Context) error {
 }
 
 type ContactsDeleteCmd struct {
-	ID string `arg:"" required:"" help:"Contact ID"`
+	ID   string `arg:"" required:"" help:"Contact ID"`
+	User string `name:"user" help:"App-only target user override (UPN or user ID)"`
 }
 
 func (c *ContactsDeleteCmd) Run(ctx context.Context) error {
@@ -159,7 +180,11 @@ func (c *ContactsDeleteCmd) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := contacts.New(rt.Graph).Delete(ctx, c.ID); err != nil {
+	targetUser, err := resolveAppOnlyTargetUser(rt.Profile, c.User)
+	if err != nil {
+		return err
+	}
+	if err := contacts.New(rt.Graph, targetUser).Delete(ctx, c.ID); err != nil {
 		return err
 	}
 

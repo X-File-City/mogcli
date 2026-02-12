@@ -13,7 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jared/mogcli/internal/secrets"
+	"github.com/jaredpalmer/mogcli/internal/errfmt"
+	"github.com/jaredpalmer/mogcli/internal/secrets"
 )
 
 var (
@@ -110,7 +111,11 @@ func (m *Manager) LoginDelegated(ctx context.Context, input DelegatedLoginInput,
 		return AccountInfo{}, ErrMissingAuthority
 	}
 	if len(input.Scopes) == 0 {
-		input.Scopes = DefaultDelegatedScopes
+		input.Scopes = BaseDelegatedScopes
+	}
+	input.Scopes = normalizeScopes(input.Scopes)
+	if len(input.Scopes) == 0 {
+		input.Scopes = BaseDelegatedScopes
 	}
 
 	deviceReq := url.Values{}
@@ -233,13 +238,32 @@ func (m *Manager) LoginAppOnly(ctx context.Context, input AppOnlyLoginInput) err
 	return err
 }
 
-func (m *Manager) AcquireDelegatedToken(ctx context.Context, profileName string, clientID string, authority string, scopes []string) (string, error) {
+func (m *Manager) AcquireDelegatedToken(
+	ctx context.Context,
+	profileName string,
+	clientID string,
+	authority string,
+	scopes []string,
+	expectedAccountID string,
+	expectedTenantID string,
+) (string, error) {
 	cache, err := m.loadToken(profileName)
 	if err != nil {
 		return "", err
 	}
 
-	if cache.AccessToken != "" && cache.ExpiresAt.After(m.nowUTC().Add(30*time.Second)) {
+	if err := m.validateCachedDelegatedIdentity(profileName, cache, expectedAccountID, expectedTenantID); err != nil {
+		return "", err
+	}
+
+	requiredScopes := normalizeScopes(scopes)
+	if len(requiredScopes) == 0 {
+		requiredScopes = BaseDelegatedScopes
+	}
+
+	if cache.AccessToken != "" &&
+		cache.ExpiresAt.After(m.nowUTC().Add(30*time.Second)) &&
+		scopeStringCoversRequiredScopes(cache.Scope, requiredScopes) {
 		return cache.AccessToken, nil
 	}
 
@@ -247,15 +271,11 @@ func (m *Manager) AcquireDelegatedToken(ctx context.Context, profileName string,
 		return "", ErrMissingRefreshToken
 	}
 
-	if len(scopes) == 0 {
-		scopes = DefaultDelegatedScopes
-	}
-
 	req := url.Values{}
 	req.Set("grant_type", "refresh_token")
 	req.Set("client_id", clientID)
 	req.Set("refresh_token", cache.RefreshToken)
-	req.Set("scope", strings.Join(scopes, " "))
+	req.Set("scope", strings.Join(requiredScopes, " "))
 
 	body, status, err := m.doFormWithStatus(ctx, endpoint(authority, "/oauth2/v2.0/token"), req)
 	if err != nil {
@@ -275,6 +295,9 @@ func (m *Manager) AcquireDelegatedToken(ctx context.Context, profileName string,
 	if tr.RefreshToken == "" {
 		tr.RefreshToken = cache.RefreshToken
 	}
+	if strings.TrimSpace(tr.Scope) == "" {
+		tr.Scope = cache.Scope
+	}
 	updated := TokenCache{
 		AccessToken:  tr.AccessToken,
 		RefreshToken: tr.RefreshToken,
@@ -285,6 +308,9 @@ func (m *Manager) AcquireDelegatedToken(ctx context.Context, profileName string,
 	}
 	if updated.IDToken == "" {
 		updated.IDToken = cache.IDToken
+	}
+	if err := m.validateCachedDelegatedIdentity(profileName, updated, expectedAccountID, expectedTenantID); err != nil {
+		return "", err
 	}
 
 	if err := m.saveToken(profileName, updated); err != nil {
@@ -350,6 +376,139 @@ func (m *Manager) Logout(profileName string) error {
 		return err
 	}
 
+	return nil
+}
+
+func (m *Manager) validateCachedDelegatedIdentity(
+	profileName string,
+	cache TokenCache,
+	expectedAccountID string,
+	expectedTenantID string,
+) error {
+	expectedAccountID = strings.TrimSpace(expectedAccountID)
+	expectedTenantID = strings.TrimSpace(expectedTenantID)
+	if expectedAccountID == "" && expectedTenantID == "" {
+		return nil
+	}
+
+	claims, err := parseIDClaims(cache.IDToken)
+	if err != nil {
+		if purgeErr := m.purgeDelegatedTokenCache(profileName); purgeErr != nil {
+			return purgeErr
+		}
+		return errfmt.NewUserFacingError(
+			fmt.Sprintf(
+				"cached delegated login for profile %s is invalid. Run `mog auth login --profile %s ...` to sign in again.",
+				profileName,
+				profileName,
+			),
+			err,
+		)
+	}
+
+	account := accountFromClaims(claims)
+	if expectedAccountID != "" && !strings.EqualFold(strings.TrimSpace(account.AccountID), expectedAccountID) {
+		if purgeErr := m.purgeDelegatedTokenCache(profileName); purgeErr != nil {
+			return purgeErr
+		}
+		return errfmt.NewUserFacingError(
+			fmt.Sprintf(
+				"cached delegated login for profile %s does not match the saved account. Run `mog auth login --profile %s ...` to sign in again.",
+				profileName,
+				profileName,
+			),
+			nil,
+		)
+	}
+
+	if expectedTenantID != "" && !tenantIDsMatch(expectedTenantID, account.TenantID) {
+		if purgeErr := m.purgeDelegatedTokenCache(profileName); purgeErr != nil {
+			return purgeErr
+		}
+		return errfmt.NewUserFacingError(
+			fmt.Sprintf(
+				"cached delegated login for profile %s does not match the saved tenant. Run `mog auth login --profile %s ...` to sign in again.",
+				profileName,
+				profileName,
+			),
+			nil,
+		)
+	}
+
+	return nil
+}
+
+func tenantIDsMatch(expectedTenantID string, actualTenantID string) bool {
+	expected := strings.TrimSpace(expectedTenantID)
+	actual := strings.TrimSpace(actualTenantID)
+
+	if expected == "" {
+		return true
+	}
+	if strings.EqualFold(expected, actual) {
+		return true
+	}
+	if looksLikeGUID(expected) {
+		return false
+	}
+	if !looksLikeTenantDomain(expected) {
+		return false
+	}
+
+	// Tenant domains are valid profile inputs, but ID tokens expose tenant IDs in the
+	// tid claim. If expected is a domain, we can only require a non-empty tenant claim.
+	return actual != ""
+}
+
+func looksLikeGUID(value string) bool {
+	value = strings.TrimSpace(value)
+	if len(value) != 36 {
+		return false
+	}
+
+	for i := 0; i < len(value); i++ {
+		switch i {
+		case 8, 13, 18, 23:
+			if value[i] != '-' {
+				return false
+			}
+		default:
+			if !isHexByte(value[i]) {
+				return false
+			}
+		}
+	}
+
+	return true
+}
+
+func isHexByte(value byte) bool {
+	return (value >= '0' && value <= '9') ||
+		(value >= 'a' && value <= 'f') ||
+		(value >= 'A' && value <= 'F')
+}
+
+func looksLikeTenantDomain(value string) bool {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if !strings.Contains(value, ".") || strings.HasPrefix(value, ".") || strings.HasSuffix(value, ".") {
+		return false
+	}
+
+	for i := 0; i < len(value); i++ {
+		ch := value[i]
+		if (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '-' || ch == '.' {
+			continue
+		}
+		return false
+	}
+
+	return true
+}
+
+func (m *Manager) purgeDelegatedTokenCache(profileName string) error {
+	if err := secrets.DeleteSecret(tokenCacheKey(profileName)); err != nil {
+		return fmt.Errorf("purge delegated token cache: %w", err)
+	}
 	return nil
 }
 
