@@ -96,7 +96,6 @@ func Execute(args []string) (err error) {
 	ctx = outfmt.WithMode(ctx, mode)
 	ctx = authclient.WithClient(ctx, cli.Client)
 	ctx = withRootFlags(ctx, &cli.RootFlags)
-	ctx = withAuthFlags(ctx, &cli.Auth)
 
 	u := ui.New(ui.Options{Stdout: os.Stdout, Stderr: os.Stderr})
 	ctx = ui.WithUI(ctx, u)

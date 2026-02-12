@@ -41,29 +41,28 @@ var newProfileStore = func() profileStore {
 }
 
 type AuthCmd struct {
-	App      bool            `name:"app" help:"Advanced: run the interactive app-only wizard (enterprise only)"`
-	Wizard   AuthWizardCmd   `cmd:"" default:"1" hidden:"" help:"Interactive authentication setup"`
-	Login    AuthLoginCmd    `cmd:"" help:"Login and save profile credentials"`
-	Logout   AuthLogoutCmd   `cmd:"" help:"Logout and clear saved credentials"`
-	Accounts AuthAccountsCmd `cmd:"" help:"List saved profiles"`
-	Use      AuthUseCmd      `cmd:"" help:"Set active profile"`
-	WhoAmI   AuthWhoAmICmd   `cmd:"" aliases:"whoami" help:"Show active profile and account"`
+	Login  AuthLoginCmd  `cmd:"" default:"1" help:"Log in to a Microsoft account"`
+	Logout AuthLogoutCmd `cmd:"" help:"Log out of a Microsoft account"`
+	Status AuthStatusCmd `cmd:"" help:"Display active account and login status"`
+	Use    AuthUseCmd    `cmd:"" help:"Switch the active profile"`
+
+	// Hidden aliases for backwards compatibility.
+	Accounts AuthStatusCmd `cmd:"" hidden:"" help:"List saved profiles"`
+	WhoAmI   AuthStatusCmd `cmd:"" aliases:"whoami" hidden:"" help:"Show active profile"`
 }
 
 type AuthLoginCmd struct {
-	Profile         string `name:"profile" required:"" help:"Local profile name used by mog (for example: personal, work, work-app)"`
-	Audience        string `name:"audience" required:"" enum:"consumer,enterprise" help:"Token audience: consumer (MSA) or enterprise (Entra work/school)"`
-	ClientID        string `name:"client-id" required:"" help:"Application (client) ID from Entra App registrations -> <app> -> Overview"`
-	Tenant          string `name:"tenant" help:"Tenant ID or domain for enterprise profiles (Directory (tenant) ID)"`
-	Authority       string `name:"authority" help:"Advanced authority override (consumers|organizations|common|tenant)"`
-	Mode            string `name:"mode" default:"delegated" enum:"delegated,app-only" help:"Auth mode: delegated (user sign-in) or app-only (daemon/service)"`
-	ClientSecret    string `name:"client-secret" help:"Client secret value for app-only mode"`
-	ClientSecretEnv string `name:"client-secret-env" help:"Environment variable name that contains the app-only client secret"`
-	ScopeWorkloads  string `name:"scope-workloads" help:"Required in delegated mode. Comma-separated workloads: mail,calendar,contacts,tasks,onedrive,groups"`
-	AppOnlyUser     string `name:"app-only-user" help:"Default app-only target user (UPN or user ID) for mail/contacts/onedrive commands"`
+	Profile         string `name:"profile" help:"Profile name (e.g. personal, work)"`
+	Audience        string `name:"audience" help:"Token audience: consumer (MSA) or enterprise (Entra)"`
+	ClientID        string `name:"client-id" help:"Application (client) ID from Entra app registration"`
+	Tenant          string `name:"tenant" help:"Tenant ID or domain (enterprise only)"`
+	Authority       string `name:"authority" hidden:"" help:"Advanced authority override"`
+	Mode            string `name:"mode" default:"delegated" help:"Auth mode: delegated or app-only"`
+	ClientSecret    string `name:"client-secret" help:"Client secret for app-only mode"`
+	ClientSecretEnv string `name:"client-secret-env" help:"Env var containing the app-only client secret"`
+	ScopeWorkloads  string `name:"scope-workloads" help:"Comma-separated workloads: mail,calendar,contacts,tasks,onedrive,groups"`
+	AppOnlyUser     string `name:"app-only-user" help:"Default target user for app-only commands (UPN or user ID)"`
 }
-
-type AuthWizardCmd struct{}
 
 type authLoginParams struct {
 	Profile                        string
@@ -79,134 +78,164 @@ type authLoginParams struct {
 	RequireDelegatedScopeWorkloads bool
 }
 
-func (c *AuthWizardCmd) Run(ctx context.Context) error {
+func (c *AuthLoginCmd) Run(ctx context.Context) error {
 	flags := rootFlagsFromContext(ctx)
-	if flags != nil && flags.NoInput {
-		return usage("`mog auth` requires interactive input. Use `mog auth login ...` for non-interactive usage")
-	}
-	if !isTerminal(os.Stdin) {
-		return usage("`mog auth` requires an interactive terminal. Use `mog auth login ...` for non-interactive usage")
-	}
+	noInput := flags != nil && flags.NoInput
+	interactive := !noInput && isTerminal(os.Stdin) && c.needsPrompt()
 
-	mode := profile.AuthModeDelegated
-	if authFlags := authFlagsFromContext(ctx); authFlags != nil && authFlags.App {
-		mode = profile.AuthModeAppOnly
+	if interactive {
+		return c.runInteractive(ctx)
 	}
+	return c.runNonInteractive(ctx)
+}
 
+// needsPrompt returns true if any required interactive field is missing.
+func (c *AuthLoginCmd) needsPrompt() bool {
+	return strings.TrimSpace(c.Profile) == "" ||
+		strings.TrimSpace(c.Audience) == "" ||
+		strings.TrimSpace(c.ClientID) == ""
+}
+
+func (c *AuthLoginCmd) runInteractive(ctx context.Context) error {
 	theme := newAuthWizardTheme()
-	printWizardMessage(ctx, renderWizardIntro(theme, mode))
-	printWizardMessage(ctx, renderEntraSetupChecklist(theme, mode))
+	printWizardMessage(ctx, theme.dim("Tip: you'll need an Entra app registration. See https://github.com/jaredpalmer/mogcli#setup"))
+	fmt.Fprintln(os.Stderr)
 
-	store := newProfileStore()
-
-	defaultProfile := ""
-	if active, err := store.Active(); err == nil {
-		defaultProfile = strings.TrimSpace(active.Name)
-	}
-
-	printWizardMessage(ctx, renderProfileNameGuide(theme))
-	profileName, err := promptRequiredValue(ctx, "Profile name", defaultProfile)
-	if err != nil {
-		return err
-	}
-
-	existing := config.ProfileRecord{Name: profileName}
-	if record, ok, getErr := store.Get(profileName); getErr != nil {
-		return getErr
-	} else if ok {
-		existing = record
-		existing.Name = profileName
-	}
-
-	audienceDefault := strings.TrimSpace(existing.Audience)
-	if audienceDefault == "" {
-		audienceDefault = profile.AudienceConsumer
-	}
-	audience := audienceDefault
-	if mode == profile.AuthModeAppOnly {
-		audience = profile.AudienceEnterprise
-		printWizardMessage(ctx, renderAppOnlyAudienceGuide(theme))
-	} else {
-		printWizardMessage(ctx, renderAudienceGuide(theme))
-		audience, err = promptAudience(ctx, audienceDefault)
+	// 1. Audience
+	audience := strings.TrimSpace(c.Audience)
+	if audience == "" {
+		var err error
+		audience, err = promptAudience(ctx, profile.AudienceConsumer)
 		if err != nil {
 			return err
 		}
 	}
 
-	printWizardMessage(ctx, renderClientIDGuide(theme))
-	clientID, err := promptRequiredValue(ctx, "Client ID", strings.TrimSpace(existing.ClientID))
-	if err != nil {
-		return err
+	// 2. Auth mode — enterprise users get a choice; consumer is always delegated
+	mode := normalizeAuthMode(c.Mode)
+	if audience == profile.AudienceEnterprise && mode == profile.AuthModeDelegated {
+		selected, err := input.SelectString(ctx, input.SelectStringConfig{
+			Title: "What auth mode?",
+			Options: []input.SelectStringOption{
+				{Label: "Delegated (user sign-in)", Value: profile.AuthModeDelegated},
+				{Label: "App-only (daemon / service)", Value: profile.AuthModeAppOnly},
+			},
+			Default: profile.AuthModeDelegated,
+		})
+		if err != nil {
+			return wrapPromptInputErr("select auth mode", err)
+		}
+		mode = selected
 	}
-	tenant := strings.TrimSpace(existing.TenantID)
-	if audience == profile.AudienceEnterprise {
-		printWizardMessage(ctx, renderTenantGuide(theme))
-		tenant, err = promptOptionalValue(ctx, "Tenant ID or domain (recommended)", strings.TrimSpace(existing.TenantID))
+
+	// 3. Client ID
+	clientID := strings.TrimSpace(c.ClientID)
+	if clientID == "" {
+		var err error
+		clientID, err = promptRequiredValue(ctx, "Application (client) ID", "")
+		if err != nil {
+			return err
+		}
+	}
+
+	// 4. Tenant (enterprise only)
+	tenant := strings.TrimSpace(c.Tenant)
+	if audience == profile.AudienceEnterprise && tenant == "" {
+		var err error
+		tenant, err = promptOptionalValue(ctx, "Tenant ID or domain", "")
+		if err != nil {
+			return err
+		}
+	}
+
+	// 5. Workloads (delegated) or secret + target user (app-only)
+	var workloads []string
+	var clientSecret, clientSecretEnv, appOnlyUser string
+
+	if mode == profile.AuthModeDelegated {
+		allWorkloads := []string{"mail", "calendar", "contacts", "tasks", "onedrive"}
+		if audience == profile.AudienceEnterprise {
+			allWorkloads = append(allWorkloads, "groups")
+		}
+		var err error
+		workloads, err = promptDelegatedWorkloads(ctx, audience, allWorkloads)
 		if err != nil {
 			return err
 		}
 	} else {
-		tenant = ""
+		var err error
+		clientSecretEnv, clientSecret, err = promptAppOnlySecretInputs(ctx, theme)
+		if err != nil {
+			return err
+		}
+		appOnlyUser, err = promptOptionalValue(ctx, "Default target user (UPN or user ID, optional)", "")
+		if err != nil {
+			return err
+		}
 	}
 
-	printWizardMessage(ctx, renderAuthorityGuide(theme))
-	authorityDefault := wizardAuthorityDefault(existing, audience, tenant)
-	authority, err := promptOptionalValue(ctx, "Authority override (advanced, optional)", authorityDefault)
-	if err != nil {
-		return err
+	// 6. Profile name — last, with a smart default
+	profileName := strings.TrimSpace(c.Profile)
+	if profileName == "" {
+		dflt := "personal"
+		if audience == profile.AudienceEnterprise {
+			dflt = "work"
+		}
+		if mode == profile.AuthModeAppOnly {
+			dflt += "-app"
+		}
+		var err error
+		profileName, err = promptRequiredValue(ctx, "Profile name", dflt)
+		if err != nil {
+			return err
+		}
 	}
 
-	params := authLoginParams{
+	fmt.Fprintln(os.Stderr)
+
+	return runAuthLogin(ctx, authLoginParams{
 		Profile:                        profileName,
 		Audience:                       audience,
 		ClientID:                       clientID,
 		Tenant:                         tenant,
-		Authority:                      authority,
+		Authority:                      defaultAuthority(audience, tenant, strings.TrimSpace(c.Authority)),
 		Mode:                           mode,
+		ClientSecret:                   clientSecret,
+		ClientSecretEnv:                clientSecretEnv,
+		ScopeWorkloads:                 workloads,
+		AppOnlyUser:                    appOnlyUser,
 		RequireDelegatedScopeWorkloads: true,
-	}
-
-	if mode == profile.AuthModeDelegated {
-		defaults, defaultErr := auth.NormalizeScopeWorkloads(existing.DelegatedScopeWorkloads)
-		if defaultErr != nil {
-			defaults = nil
-		}
-
-		workloads, workloadErr := promptDelegatedWorkloads(ctx, theme, defaults)
-		if workloadErr != nil {
-			return workloadErr
-		}
-		params.ScopeWorkloads = workloads
-	} else {
-		printWizardMessage(ctx, renderAppOnlyUserGuide(theme))
-		params.AppOnlyUser, err = promptOptionalValue(ctx, "Default app-only user (optional)", strings.TrimSpace(existing.AppOnlyUser))
-		if err != nil {
-			return err
-		}
-
-		params.ClientSecretEnv, params.ClientSecret, err = promptAppOnlySecretInputs(ctx, theme)
-		if err != nil {
-			return err
-		}
-	}
-
-	return runAuthLogin(ctx, params)
+	})
 }
 
-func (c *AuthLoginCmd) Run(ctx context.Context) error {
-	if err := ensureAuthWizardFlagsUnused(ctx); err != nil {
-		return err
-	}
-
+func (c *AuthLoginCmd) runNonInteractive(ctx context.Context) error {
 	mode := normalizeAuthMode(c.Mode)
 	if mode == "" {
 		mode = profile.AuthModeDelegated
 	}
 
+	var missing []string
+	if strings.TrimSpace(c.Profile) == "" {
+		missing = append(missing, "--profile")
+	}
+	if strings.TrimSpace(c.Audience) == "" {
+		missing = append(missing, "--audience")
+	}
+	if strings.TrimSpace(c.ClientID) == "" {
+		missing = append(missing, "--client-id")
+	}
+	if len(missing) > 0 {
+		return usagef("missing required flags: %s\nTip: run `mog auth login` interactively for guided setup", strings.Join(missing, ", "))
+	}
+
+	aud := strings.ToLower(strings.TrimSpace(c.Audience))
+	if aud != profile.AudienceConsumer && aud != profile.AudienceEnterprise {
+		return usagef("invalid --audience %q: must be consumer or enterprise", c.Audience)
+	}
+
 	params := authLoginParams{
 		Profile:                        strings.TrimSpace(c.Profile),
-		Audience:                       strings.TrimSpace(c.Audience),
+		Audience:                       aud,
 		ClientID:                       strings.TrimSpace(c.ClientID),
 		Tenant:                         strings.TrimSpace(c.Tenant),
 		Authority:                      strings.TrimSpace(c.Authority),
@@ -328,7 +357,17 @@ func runAuthLogin(ctx context.Context, params authLoginParams) error {
 		})
 	}
 
-	fmt.Fprintf(os.Stdout, "Logged in as profile %s (%s, %s)\n", record.Name, record.Audience, record.AuthMode)
+	theme := newAuthWizardTheme()
+	fmt.Fprintf(os.Stdout, "%s Logged in to profile %s\n", theme.ok("✓"), record.Name)
+	fmt.Fprintf(os.Stdout, "  Account:  %s\n", displayOrDash(record.Username))
+	fmt.Fprintf(os.Stdout, "  Audience: %s\n", record.Audience)
+	fmt.Fprintf(os.Stdout, "  Mode:     %s\n", record.AuthMode)
+	if len(record.DelegatedScopeWorkloads) > 0 {
+		fmt.Fprintf(os.Stdout, "  Workloads: %s\n", strings.Join(record.DelegatedScopeWorkloads, ", "))
+	}
+	if record.TenantID != "" {
+		fmt.Fprintf(os.Stdout, "  Tenant:   %s\n", record.TenantID)
+	}
 	return nil
 }
 
@@ -384,13 +423,12 @@ func promptAudience(ctx context.Context, defaultAudience string) (string, error)
 	}
 
 	selected, err := input.SelectString(ctx, input.SelectStringConfig{
-		Title:       "Audience",
-		Description: "Pick the audience that matches your app registration.",
-		Default:     value,
+		Title: "What account type?",
 		Options: []input.SelectStringOption{
-			{Label: "consumer (personal Microsoft accounts)", Value: profile.AudienceConsumer},
-			{Label: "enterprise (work/school accounts)", Value: profile.AudienceEnterprise},
+			{Label: "Personal Microsoft account (Outlook/Hotmail/Live)", Value: profile.AudienceConsumer},
+			{Label: "Work or school account (Microsoft Entra)", Value: profile.AudienceEnterprise},
 		},
+		Default: value,
 	})
 	if err != nil {
 		return "", wrapPromptInputErr("select audience", err)
@@ -398,48 +436,54 @@ func promptAudience(ctx context.Context, defaultAudience string) (string, error)
 	return selected, nil
 }
 
-func wizardAuthorityDefault(existing config.ProfileRecord, selectedAudience string, selectedTenant string) string {
-	current := strings.TrimSpace(existing.Authority)
-	if current == "" {
-		return ""
+func printWizardMessage(ctx context.Context, message string) {
+	if u := uiFromContext(ctx); u != nil {
+		u.Err().Println(message)
+		return
 	}
-
-	sameAudience := strings.EqualFold(strings.TrimSpace(existing.Audience), strings.TrimSpace(selectedAudience))
-	sameTenant := strings.EqualFold(strings.TrimSpace(existing.TenantID), strings.TrimSpace(selectedTenant))
-	if sameAudience && sameTenant {
-		return current
-	}
-
-	return defaultAuthority(selectedAudience, selectedTenant, "")
+	_, _ = fmt.Fprintln(os.Stderr, message)
 }
 
-func promptDelegatedWorkloads(ctx context.Context, theme authWizardTheme, defaults []string) ([]string, error) {
-	defaultDisplay := strings.Join(defaults, ",")
-	printWizardMessage(ctx, renderWorkloadGuide(theme, defaultDisplay))
+func wrapPromptInputErr(action string, err error) error {
+	if errors.Is(err, io.EOF) {
+		return &ExitError{Code: 1, Err: errors.New("cancelled")}
+	}
+	return fmt.Errorf("%s: %w", action, err)
+}
 
+func displayOrDash(v string) string {
+	if strings.TrimSpace(v) == "" {
+		return "-"
+	}
+	return v
+}
+
+func promptDelegatedWorkloads(ctx context.Context, audience string, defaults []string) ([]string, error) {
 	workloadOptions := []input.SelectStringOption{
-		{Label: "mail (Mail.Read, Mail.Send)", Value: "mail"},
-		{Label: "calendar (Calendars.Read, Calendars.ReadWrite)", Value: "calendar"},
-		{Label: "contacts (Contacts.Read, Contacts.ReadWrite)", Value: "contacts"},
-		{Label: "tasks (Tasks.Read, Tasks.ReadWrite)", Value: "tasks"},
-		{Label: "onedrive (Files.Read, Files.ReadWrite)", Value: "onedrive"},
-		{Label: "groups (Group.Read.All, GroupMember.Read.All)", Value: "groups"},
+		{Label: "mail", Value: "mail"},
+		{Label: "calendar", Value: "calendar"},
+		{Label: "contacts", Value: "contacts"},
+		{Label: "tasks", Value: "tasks"},
+		{Label: "onedrive", Value: "onedrive"},
+	}
+	if audience == profile.AudienceEnterprise {
+		workloadOptions = append(workloadOptions, input.SelectStringOption{Label: "groups (enterprise only)", Value: "groups"})
 	}
 
 	selected, err := input.MultiSelectStrings(ctx, input.MultiSelectStringConfig{
-		Title:       "Delegated workload groups",
-		Description: "Use space to toggle selections, then press enter to continue.",
+		Title:       "Workloads to enable",
+		Description: "Space to toggle, enter to confirm.",
 		Defaults:    defaults,
 		Options:     workloadOptions,
 		Validate: func(values []string) error {
 			if len(values) == 0 {
-				return errors.New("at least one delegated workload is required")
+				return errors.New("select at least one workload")
 			}
 			return nil
 		},
 	})
 	if err != nil {
-		return nil, wrapPromptInputErr("select delegated workloads", err)
+		return nil, wrapPromptInputErr("select workloads", err)
 	}
 
 	workloads, normalizeErr := auth.NormalizeScopeWorkloads(selected)
@@ -450,13 +494,12 @@ func promptDelegatedWorkloads(ctx context.Context, theme authWizardTheme, defaul
 }
 
 func promptAppOnlySecretInputs(ctx context.Context, theme authWizardTheme) (string, string, error) {
-	printWizardMessage(ctx, renderAppOnlySecretGuide(theme))
 	for {
 		envName, err := promptOptionalValue(ctx, "Client secret env var (recommended)", "")
 		if err != nil {
 			return "", "", err
 		}
-		secret, err := promptOptionalValue(ctx, "Client secret value (optional if env var is set)", "")
+		secret, err := promptOptionalValue(ctx, "Client secret value (if no env var)", "")
 		if err != nil {
 			return "", "", err
 		}
@@ -466,7 +509,7 @@ func promptAppOnlySecretInputs(ctx context.Context, theme authWizardTheme) (stri
 			return envName, secret, nil
 		}
 
-		printWizardMessage(ctx, theme.warn("Provide either a client secret env var or a client secret value for app-only mode."))
+		printWizardMessage(ctx, theme.warn("You must provide either an env var or a secret value."))
 	}
 }
 
@@ -487,240 +530,16 @@ func (t authWizardTheme) style(code string, value string) string {
 	return "\x1b[" + code + "m" + value + "\x1b[0m"
 }
 
-func (t authWizardTheme) title(value string) string { return t.style("1;36", value) }
-func (t authWizardTheme) step(value string) string  { return t.style("1;34", value) }
-func (t authWizardTheme) key(value string) string   { return t.style("1;33", value) }
-func (t authWizardTheme) ok(value string) string    { return t.style("32", value) }
-func (t authWizardTheme) warn(value string) string  { return t.style("33", value) }
-func (t authWizardTheme) dim(value string) string   { return t.style("2", value) }
-
-func renderWizardIntro(theme authWizardTheme, mode string) string {
-	lines := []string{
-		theme.title("MOG AUTH SETUP"),
-		"  This wizard will configure your profile and start Microsoft login.",
-		"",
-		theme.step("Default flow"),
-		"  `mog auth` configures delegated user sign-in.",
-		"  Use `mog auth --app` for advanced enterprise app-only setup.",
-	}
-
-	if mode == profile.AuthModeAppOnly {
-		lines = append(lines,
-			"",
-			theme.step("Before you start, gather these from Microsoft Entra:"),
-			"  1) Application (client) ID",
-			"  2) Directory (tenant) ID or tenant domain",
-			"  3) Client secret value (or env var name that contains it)",
-		)
-	} else {
-		lines = append(lines,
-			"",
-			theme.step("Before you start, gather these from Microsoft Entra:"),
-			"  1) Application (client) ID",
-			"  2) Directory (tenant) ID or tenant domain (enterprise profiles)",
-		)
-	}
-
-	lines = append(lines,
-		"",
-		theme.dim("Tip: Use `mog auth login --help` for non-interactive setup."),
-	)
-
-	return strings.Join(lines, "\n")
-}
-
-func renderEntraSetupChecklist(theme authWizardTheme, mode string) string {
-	if mode == profile.AuthModeAppOnly {
-		lines := []string{
-			theme.step("App-only checklist (enterprise only)"),
-			"  A) Use an enterprise app registration",
-			"     Entra -> App registrations -> <app>",
-			"     Supported account types: organizational directory only",
-			"",
-			"  B) API permissions (Microsoft Graph -> Application permissions)",
-			"     mail      -> Mail.Read, Mail.Send",
-			"     contacts  -> Contacts.Read, Contacts.ReadWrite",
-			"     onedrive  -> Files.Read.All, Files.ReadWrite.All",
-			"",
-			"  C) Grant admin consent",
-			"     API permissions -> Grant admin consent",
-			"",
-			"  D) Create client secret",
-			"     Certificates & secrets -> New client secret",
-			"     Copy the secret " + theme.key("Value") + " now (not Secret ID).",
-		}
-		return strings.Join(lines, "\n")
-	}
-
-	lines := []string{
-		theme.step("Delegated setup checklist"),
-		"  A) Create app registration",
-		"     Entra -> App registrations -> New registration",
-		"     Name: any label (for example: mog-cli-personal or mog-cli-work)",
-		"     Supported account types:",
-		"       - consumer profile: \"Personal Microsoft accounts only\"",
-		"       - enterprise profile: \"Accounts in this organizational directory only\"",
-		"     Redirect URI: leave blank for CLI device-code setup",
-		"",
-		"  B) Authentication settings (required for device code flow)",
-		"     Entra -> App registrations -> <app> -> Authentication",
-		"       - Enable \"Allow public client flows\" = Yes",
-		"       - Save",
-		"",
-		"  C) API permissions (Microsoft Graph)",
-		"     Entra -> App registrations -> <app> -> API permissions -> Add a permission",
-		"       Delegated permissions:",
-		"          " + theme.key("mail") + "      -> Mail.Read, Mail.Send",
-		"          " + theme.key("calendar") + "  -> Calendars.Read, Calendars.ReadWrite",
-		"          " + theme.key("contacts") + "  -> Contacts.Read, Contacts.ReadWrite",
-		"          " + theme.key("tasks") + "     -> Tasks.Read, Tasks.ReadWrite",
-		"          " + theme.key("onedrive") + "  -> Files.Read, Files.ReadWrite",
-		"          " + theme.key("groups") + "    -> Group.Read.All, GroupMember.Read.All (enterprise only)",
-		"",
-		"  D) Values to copy into mog",
-		"     --client-id     = Application (client) ID",
-		"     --tenant        = Directory (tenant) ID or tenant domain (enterprise)",
-	}
-
-	return strings.Join(lines, "\n")
-}
-
-func renderProfileNameGuide(theme authWizardTheme) string {
-	lines := []string{
-		theme.step("Step 1: Profile name"),
-		"  This is a local nickname in mog (examples: personal, work, work-app).",
-		"  It helps you switch accounts quickly with `mog auth use <profile>`.",
-	}
-	return strings.Join(lines, "\n")
-}
-
-func renderAudienceGuide(theme authWizardTheme) string {
-	lines := []string{
-		theme.step("Step 2: Audience"),
-		"  " + theme.key("consumer") + "  = personal Microsoft accounts (MSA, Outlook/Hotmail/Live)",
-		"  " + theme.key("enterprise") + " = work/school accounts (Microsoft Entra ID)",
-		"  Pick the audience that matches your app registration's supported account type.",
-		"  If these do not match, login usually fails with AADSTS audience/tenant errors.",
-	}
-	return strings.Join(lines, "\n")
-}
-
-func renderAppOnlyAudienceGuide(theme authWizardTheme) string {
-	lines := []string{
-		theme.step("Step 2: Audience"),
-		"  App-only profiles always use " + theme.key("enterprise") + " audience.",
-		"  Consumer audience is unsupported in app-only mode.",
-	}
-	return strings.Join(lines, "\n")
-}
-
-func renderClientIDGuide(theme authWizardTheme) string {
-	lines := []string{
-		theme.step("Step 3: Client ID"),
-		"  Enter the Application (client) ID exactly as shown in app Overview.",
-		"  Format is a GUID like: 11111111-2222-3333-4444-555555555555",
-	}
-	return strings.Join(lines, "\n")
-}
-
-func renderTenantGuide(theme authWizardTheme) string {
-	lines := []string{
-		theme.step("Tenant (enterprise recommended)"),
-		"  Use your Directory (tenant) ID GUID or tenant domain (for example: contoso.onmicrosoft.com).",
-		"  If blank, mog will default authority automatically.",
-	}
-	return strings.Join(lines, "\n")
-}
-
-func renderAuthorityGuide(theme authWizardTheme) string {
-	lines := []string{
-		theme.step("Authority override (advanced)"),
-		"  Leave blank unless you need explicit authority routing.",
-		"  Common values: consumers, organizations, common, or a specific tenant ID/domain.",
-	}
-	return strings.Join(lines, "\n")
-}
-
-func renderWorkloadGuide(theme authWizardTheme, defaultDisplay string) string {
-	lines := []string{
-		theme.step("Step 4: Delegated workload groups"),
-		"  Select one or more workload groups. mog requests minimal per-command scopes later.",
-		"  Use space to toggle options, then press Enter to continue.",
-		"  Available selections:",
-		"    " + theme.key("mail") + "      Outlook mail list/get/send",
-		"              permissions: Mail.Read, Mail.Send",
-		"    " + theme.key("calendar") + "  Outlook calendar list/get/create/update/delete",
-		"              permissions: Calendars.Read, Calendars.ReadWrite",
-		"    " + theme.key("contacts") + "  Outlook contacts list/get/create/update/delete",
-		"              permissions: Contacts.Read, Contacts.ReadWrite",
-		"    " + theme.key("tasks") + "     Microsoft To Do list/get/create/update/delete",
-		"              permissions: Tasks.Read, Tasks.ReadWrite",
-		"    " + theme.key("onedrive") + "  OneDrive ls/get/put/mkdir/rm",
-		"              permissions: Files.Read, Files.ReadWrite",
-		"    " + theme.key("groups") + "    Microsoft 365 groups list/get/members (enterprise only)",
-		"              permissions: Group.Read.All, GroupMember.Read.All",
-		"  Base delegated permissions always included: openid, profile, offline_access, User.Read",
-	}
-	if defaultDisplay != "" {
-		lines = append(lines, "  "+theme.ok("Default from this profile: "+defaultDisplay))
-	}
-	return strings.Join(lines, "\n")
-}
-
-func renderAppOnlyUserGuide(theme authWizardTheme) string {
-	lines := []string{
-		theme.step("Step 4: Default app-only target user (optional)"),
-		"  Used by app-only mail/contacts/onedrive commands when --user is not provided.",
-		"  Provide a user principal name or user object ID.",
-	}
-	return strings.Join(lines, "\n")
-}
-
-func renderAppOnlySecretGuide(theme authWizardTheme) string {
-	lines := []string{
-		theme.step("Step 5: App-only client secret"),
-		"  You must provide one of:",
-		"    - " + theme.key("Client secret env var") + " (recommended, avoids plaintext in shell history)",
-		"    - " + theme.key("Client secret value"),
-		"  Secret source: Entra -> App registrations -> <app> -> Certificates & secrets.",
-		"  App-only commands supported today: mail, contacts, onedrive.",
-		"  Calendar/tasks are intentionally blocked in app-only mode.",
-	}
-	return strings.Join(lines, "\n")
-}
-
-func printWizardMessage(ctx context.Context, message string) {
-	if u := uiFromContext(ctx); u != nil {
-		u.Err().Println(message)
-		return
-	}
-	_, _ = fmt.Fprintln(os.Stderr, message)
-}
-
-func wrapPromptInputErr(action string, err error) error {
-	if errors.Is(err, io.EOF) {
-		return &ExitError{Code: 1, Err: errors.New("cancelled")}
-	}
-	return fmt.Errorf("%s: %w", action, err)
-}
-
-func ensureAuthWizardFlagsUnused(ctx context.Context) error {
-	if flags := authFlagsFromContext(ctx); flags != nil && flags.App {
-		return usage("`--app` is only supported with interactive `mog auth`")
-	}
-	return nil
-}
+func (t authWizardTheme) ok(value string) string   { return t.style("32", value) }
+func (t authWizardTheme) warn(value string) string { return t.style("33", value) }
+func (t authWizardTheme) dim(value string) string  { return t.style("2", value) }
 
 type AuthLogoutCmd struct {
-	Profile string `name:"profile" help:"Profile name to logout"`
-	All     bool   `name:"all" help:"Logout all profiles"`
+	Profile string `name:"profile" help:"Profile name to log out"`
+	All     bool   `name:"all" help:"Log out all profiles"`
 }
 
 func (c *AuthLogoutCmd) Run(ctx context.Context) error {
-	if err := ensureAuthWizardFlagsUnused(ctx); err != nil {
-		return err
-	}
-
 	store := newProfileStore()
 	manager := newAuthManager()
 
@@ -764,13 +583,9 @@ func (c *AuthLogoutCmd) Run(ctx context.Context) error {
 	return nil
 }
 
-type AuthAccountsCmd struct{}
+type AuthStatusCmd struct{}
 
-func (c *AuthAccountsCmd) Run(ctx context.Context) error {
-	if err := ensureAuthWizardFlagsUnused(ctx); err != nil {
-		return err
-	}
-
+func (c *AuthStatusCmd) Run(ctx context.Context) error {
 	store := newProfileStore()
 	profiles, err := store.List()
 	if err != nil {
@@ -785,19 +600,27 @@ func (c *AuthAccountsCmd) Run(ctx context.Context) error {
 		return outfmt.WriteJSON(os.Stdout, map[string]any{"profiles": profiles})
 	}
 	if len(profiles) == 0 {
-		fmt.Fprintln(os.Stdout, "No profiles configured. Run `mog auth` to get started.")
+		fmt.Fprintln(os.Stdout, "No profiles configured. Run `mog auth login` to get started.")
 		return nil
 	}
 
-	w, done := tableWriter(ctx)
-	defer done()
-	_, _ = fmt.Fprintln(w, "ACTIVE\tPROFILE\tAUDIENCE\tMODE\tACCOUNT\tTENANT")
+	theme := newAuthWizardTheme()
 	for _, p := range profiles {
-		marker := ""
+		marker := " "
 		if p.Active {
-			marker = "*"
+			marker = theme.ok("✓")
 		}
-		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", marker, p.Name, p.Audience, p.AuthMode, p.Username, p.TenantID)
+		account := displayOrDash(p.Username)
+		fmt.Fprintf(os.Stdout, "%s %s\n", marker, p.Name)
+		fmt.Fprintf(os.Stdout, "    Account:  %s\n", account)
+		fmt.Fprintf(os.Stdout, "    Audience: %s\n", p.Audience)
+		fmt.Fprintf(os.Stdout, "    Mode:     %s\n", p.AuthMode)
+		if len(p.DelegatedScopeWorkloads) > 0 {
+			fmt.Fprintf(os.Stdout, "    Workloads: %s\n", strings.Join(p.DelegatedScopeWorkloads, ", "))
+		}
+		if p.TenantID != "" {
+			fmt.Fprintf(os.Stdout, "    Tenant:   %s\n", p.TenantID)
+		}
 	}
 
 	return nil
@@ -808,10 +631,6 @@ type AuthUseCmd struct {
 }
 
 func (c *AuthUseCmd) Run(ctx context.Context) error {
-	if err := ensureAuthWizardFlagsUnused(ctx); err != nil {
-		return err
-	}
-
 	store := newProfileStore()
 	if err := store.SetActive(c.Profile); err != nil {
 		return err
@@ -820,34 +639,8 @@ func (c *AuthUseCmd) Run(ctx context.Context) error {
 	if outfmt.IsJSON(ctx) {
 		return outfmt.WriteJSON(os.Stdout, map[string]any{"active_profile": c.Profile})
 	}
-	fmt.Fprintf(os.Stdout, "Active profile set to %s\n", c.Profile)
-	return nil
-}
-
-type AuthWhoAmICmd struct{}
-
-func (c *AuthWhoAmICmd) Run(ctx context.Context) error {
-	if err := ensureAuthWizardFlagsUnused(ctx); err != nil {
-		return err
-	}
-
-	store := newProfileStore()
-	record, err := store.Resolve(rootProfileOverride(ctx))
-	if err != nil {
-		return err
-	}
-
-	if outfmt.IsJSON(ctx) {
-		return outfmt.WriteJSON(os.Stdout, map[string]any{
-			"profile":  record.Name,
-			"audience": record.Audience,
-			"mode":     record.AuthMode,
-			"account":  record.Username,
-			"tenant":   record.TenantID,
-		})
-	}
-
-	fmt.Fprintf(os.Stdout, "Profile: %s\nAudience: %s\nMode: %s\nAccount: %s\nTenant: %s\n", record.Name, record.Audience, record.AuthMode, record.Username, record.TenantID)
+	theme := newAuthWizardTheme()
+	fmt.Fprintf(os.Stdout, "%s Active profile set to %s\n", theme.ok("✓"), c.Profile)
 	return nil
 }
 

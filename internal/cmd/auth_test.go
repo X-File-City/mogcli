@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/jaredpalmer/mogcli/internal/auth"
-	"github.com/jaredpalmer/mogcli/internal/config"
 	"github.com/jaredpalmer/mogcli/internal/profile"
 )
 
@@ -36,7 +35,25 @@ func (m *fakeAuthManager) Logout(string) error {
 	return nil
 }
 
+func TestAuthLoginNonInteractiveRequiresFlags(t *testing.T) {
+	// --no-input forces non-interactive path; missing --profile/--audience/--client-id
+	ctx := withRootFlags(context.Background(), &RootFlags{NoInput: true})
+	cmd := AuthLoginCmd{Mode: "delegated"}
+	err := cmd.Run(ctx)
+	if err == nil {
+		t.Fatal("expected usage error")
+	}
+	var exitErr *ExitError
+	if !errors.As(err, &exitErr) || exitErr.Code != 2 {
+		t.Fatalf("expected usage ExitError code 2, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "--profile") {
+		t.Fatalf("expected --profile in error, got %v", err)
+	}
+}
+
 func TestAuthLoginDelegatedRequiresScopeWorkloads(t *testing.T) {
+	ctx := withRootFlags(context.Background(), &RootFlags{NoInput: true})
 	cmd := AuthLoginCmd{
 		Profile:  "work",
 		Audience: "enterprise",
@@ -44,7 +61,7 @@ func TestAuthLoginDelegatedRequiresScopeWorkloads(t *testing.T) {
 		Mode:     "delegated",
 	}
 
-	err := cmd.Run(context.Background())
+	err := cmd.Run(ctx)
 	if err == nil {
 		t.Fatal("expected usage error")
 	}
@@ -59,6 +76,7 @@ func TestAuthLoginDelegatedRequiresScopeWorkloads(t *testing.T) {
 }
 
 func TestAuthLoginDelegatedValidatesScopeWorkloads(t *testing.T) {
+	ctx := withRootFlags(context.Background(), &RootFlags{NoInput: true})
 	cmd := AuthLoginCmd{
 		Profile:        "work",
 		Audience:       "enterprise",
@@ -67,43 +85,6 @@ func TestAuthLoginDelegatedValidatesScopeWorkloads(t *testing.T) {
 		ScopeWorkloads: "mail,unknown",
 	}
 
-	err := cmd.Run(context.Background())
-	if err == nil {
-		t.Fatal("expected usage error")
-	}
-
-	var exitErr *ExitError
-	if !errors.As(err, &exitErr) || exitErr.Code != 2 {
-		t.Fatalf("expected usage ExitError code 2, got %v", err)
-	}
-}
-
-func TestAuthWizardRejectsNoInput(t *testing.T) {
-	ctx := withRootFlags(context.Background(), &RootFlags{NoInput: true})
-	err := (&AuthWizardCmd{}).Run(ctx)
-	if err == nil {
-		t.Fatal("expected usage error")
-	}
-
-	var exitErr *ExitError
-	if !errors.As(err, &exitErr) || exitErr.Code != 2 {
-		t.Fatalf("expected usage ExitError code 2, got %v", err)
-	}
-	if !strings.Contains(strings.ToLower(err.Error()), "interactive input") {
-		t.Fatalf("expected interactive input guidance, got %v", err)
-	}
-}
-
-func TestAuthLoginRejectsAppWizardFlag(t *testing.T) {
-	cmd := AuthLoginCmd{
-		Profile:        "work",
-		Audience:       "enterprise",
-		ClientID:       "client-id",
-		Mode:           "delegated",
-		ScopeWorkloads: "mail",
-	}
-
-	ctx := withAuthFlags(context.Background(), &AuthCmd{App: true})
 	err := cmd.Run(ctx)
 	if err == nil {
 		t.Fatal("expected usage error")
@@ -112,9 +93,6 @@ func TestAuthLoginRejectsAppWizardFlag(t *testing.T) {
 	var exitErr *ExitError
 	if !errors.As(err, &exitErr) || exitErr.Code != 2 {
 		t.Fatalf("expected usage ExitError code 2, got %v", err)
-	}
-	if !strings.Contains(err.Error(), "`--app` is only supported with interactive `mog auth`") {
-		t.Fatalf("expected --app usage guidance, got %v", err)
 	}
 }
 
@@ -135,6 +113,7 @@ func TestAuthLoginDelegatedPersistsWorkloads(t *testing.T) {
 		newAuthManager = oldFactory
 	})
 
+	ctx := withRootFlags(context.Background(), &RootFlags{NoInput: true})
 	cmd := AuthLoginCmd{
 		Profile:        "work",
 		Audience:       "enterprise",
@@ -144,7 +123,7 @@ func TestAuthLoginDelegatedPersistsWorkloads(t *testing.T) {
 		ScopeWorkloads: "mail,contacts",
 	}
 
-	if err := cmd.Run(context.Background()); err != nil {
+	if err := cmd.Run(ctx); err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
 
@@ -191,6 +170,7 @@ func TestAuthLoginDelegatedStoresResolvedTenantID(t *testing.T) {
 		newAuthManager = oldFactory
 	})
 
+	ctx := withRootFlags(context.Background(), &RootFlags{NoInput: true})
 	cmd := AuthLoginCmd{
 		Profile:        "work",
 		Audience:       "enterprise",
@@ -200,7 +180,7 @@ func TestAuthLoginDelegatedStoresResolvedTenantID(t *testing.T) {
 		ScopeWorkloads: "mail",
 	}
 
-	if err := cmd.Run(context.Background()); err != nil {
+	if err := cmd.Run(ctx); err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
 
@@ -224,6 +204,7 @@ func TestAuthLoginAppOnlyPersistsDefaultUser(t *testing.T) {
 		newAuthManager = oldFactory
 	})
 
+	ctx := withRootFlags(context.Background(), &RootFlags{NoInput: true})
 	cmd := AuthLoginCmd{
 		Profile:      "work-app",
 		Audience:     "enterprise",
@@ -234,7 +215,7 @@ func TestAuthLoginAppOnlyPersistsDefaultUser(t *testing.T) {
 		AppOnlyUser:  "person@example.com",
 	}
 
-	if err := cmd.Run(context.Background()); err != nil {
+	if err := cmd.Run(ctx); err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
 
@@ -253,70 +234,40 @@ func TestAuthLoginAppOnlyPersistsDefaultUser(t *testing.T) {
 	}
 }
 
-func TestAuthAccountsEmptyState(t *testing.T) {
+func TestAuthStatusEmptyState(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	stdout, stderr, err := captureExecuteOutput(t, []string{"auth", "accounts"})
+	stdout, stderr, err := captureExecuteOutput(t, []string{"auth", "status"})
 	if err != nil {
-		t.Fatalf("Execute(auth accounts) failed: %v\nstderr:\n%s", err, stderr)
+		t.Fatalf("Execute(auth status) failed: %v\nstderr:\n%s", err, stderr)
 	}
 	if strings.TrimSpace(stderr) != "" {
 		t.Fatalf("expected no stderr, got:\n%s", stderr)
 	}
-	if !strings.Contains(stdout, "No profiles configured. Run `mog auth` to get started.") {
+	if !strings.Contains(stdout, "No profiles configured") {
 		t.Fatalf("expected empty-state guidance, got:\n%s", stdout)
 	}
 }
 
-func TestWizardAuthorityDefault(t *testing.T) {
-	t.Parallel()
+func TestAuthLoginValidatesAudience(t *testing.T) {
+	ctx := withRootFlags(context.Background(), &RootFlags{NoInput: true})
+	cmd := AuthLoginCmd{
+		Profile:  "test",
+		Audience: "invalid",
+		ClientID: "some-id",
+		Mode:     "delegated",
+	}
 
-	t.Run("unchanged profile keeps existing authority", func(t *testing.T) {
-		t.Parallel()
-
-		got := wizardAuthorityDefault(config.ProfileRecord{
-			Audience:  "enterprise",
-			TenantID:  "tenant-a",
-			Authority: "tenant-a",
-		}, "enterprise", "tenant-a")
-		if got != "tenant-a" {
-			t.Fatalf("expected existing authority, got %q", got)
-		}
-	})
-
-	t.Run("audience change resets authority default", func(t *testing.T) {
-		t.Parallel()
-
-		got := wizardAuthorityDefault(config.ProfileRecord{
-			Audience:  "enterprise",
-			TenantID:  "tenant-a",
-			Authority: "tenant-a",
-		}, "consumer", "")
-		if got != "consumers" {
-			t.Fatalf("expected consumers authority, got %q", got)
-		}
-	})
-
-	t.Run("tenant change resets authority default", func(t *testing.T) {
-		t.Parallel()
-
-		got := wizardAuthorityDefault(config.ProfileRecord{
-			Audience:  "enterprise",
-			TenantID:  "tenant-a",
-			Authority: "tenant-a",
-		}, "enterprise", "tenant-b")
-		if got != "tenant-b" {
-			t.Fatalf("expected tenant-b authority, got %q", got)
-		}
-	})
-
-	t.Run("empty existing authority stays empty", func(t *testing.T) {
-		t.Parallel()
-
-		got := wizardAuthorityDefault(config.ProfileRecord{}, "enterprise", "tenant-a")
-		if got != "" {
-			t.Fatalf("expected empty default, got %q", got)
-		}
-	})
+	err := cmd.Run(ctx)
+	if err == nil {
+		t.Fatal("expected error for invalid audience")
+	}
+	var exitErr *ExitError
+	if !errors.As(err, &exitErr) || exitErr.Code != 2 {
+		t.Fatalf("expected usage ExitError code 2, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "--audience") {
+		t.Fatalf("expected audience error, got %v", err)
+	}
 }
