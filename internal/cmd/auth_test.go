@@ -94,6 +94,30 @@ func TestAuthWizardRejectsNoInput(t *testing.T) {
 	}
 }
 
+func TestAuthLoginRejectsAppWizardFlag(t *testing.T) {
+	cmd := AuthLoginCmd{
+		Profile:        "work",
+		Audience:       "enterprise",
+		ClientID:       "client-id",
+		Mode:           "delegated",
+		ScopeWorkloads: "mail",
+	}
+
+	ctx := withAuthFlags(context.Background(), &AuthCmd{App: true})
+	err := cmd.Run(ctx)
+	if err == nil {
+		t.Fatal("expected usage error")
+	}
+
+	var exitErr *ExitError
+	if !errors.As(err, &exitErr) || exitErr.Code != 2 {
+		t.Fatalf("expected usage ExitError code 2, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "`--app` is only supported with interactive `mog auth`") {
+		t.Fatalf("expected --app usage guidance, got %v", err)
+	}
+}
+
 func TestAuthLoginDelegatedPersistsWorkloads(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

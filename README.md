@@ -10,7 +10,7 @@ Microsoft 365 in your terminal.
 - Consumer and enterprise audiences.
 - Delegated user auth and enterprise app-only auth.
 - Stable scripting output modes: `--json` and `--plain`.
-- Interactive auth wizard (`mog auth`) plus non-interactive login (`mog auth login`).
+- Interactive delegated wizard (`mog auth`), advanced app-only wizard (`mog auth --app`), and non-interactive login (`mog auth login`).
 - Per-command scope requests in delegated mode (progressive consent).
 
 ### Workload support matrix
@@ -77,6 +77,12 @@ mog auth
 
 This wizard configures the profile and starts delegated device-code login.
 
+Advanced app-only interactive setup (enterprise only):
+
+```bash
+mog auth --app
+```
+
 ### 2) Scripted delegated login
 
 Consumer profile:
@@ -131,6 +137,7 @@ mog --use-profile work mail list --max 10
 
 ## Command overview
 
+- `mog auth [--app]`
 - `mog auth login|logout|accounts|use|whoami`
 - `mog mail list|get|send`
 - `mog calendar list|get|create|update|delete`
