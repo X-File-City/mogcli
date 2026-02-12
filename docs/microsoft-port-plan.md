@@ -36,6 +36,7 @@ Already decided with user:
 1. Use separate app registrations/client IDs for consumer and enterprise profiles.
 2. Allow login to both audiences, but exactly one active profile at a time.
 3. Defer app-only support to phase 2 (after delegated flows are stable).
+4. Use unstyled plain-text terminal output only; remove `--color` and `MOG_COLOR`.
 
 Reference: current project state and sources inventory [L1], [L2].
 
@@ -48,7 +49,7 @@ Reference: current project state and sources inventory [L1], [L2].
 1. Entry/exit lifecycle and parse/error/exit-code flow [G1], [G2], [G16].
 2. Help rendering with terminal-aware formatting [G3].
 3. Output mode (`--json`, `--plain`) and serialization helpers [G4].
-4. UI printer/color controls [G5].
+4. UI printer plumbing adapted to unstyled plain-text output [G5].
 5. Error normalization patterns [G6].
 6. Config directory/path plumbing and atomic writes [G7].
 7. Client/account mapping logic that can be adapted into profile routing [G8].
@@ -386,7 +387,6 @@ These are still open and should be resolved before phase-0 implementation begins
 1. Distribution target for milestone 1: local binary only or include Homebrew packaging.
 2. Login UX preference: device-code only, or also support localhost browser callback in phase 1.
 3. Command naming finalization: keep noun-first (`mog mail list`) or align more tightly with `gogcli` patterns.
-4. Output compatibility policy: strict parity with `gogcli` shell conventions vs cleanup/breaking changes now.
 
 ## 12. Citation index
 

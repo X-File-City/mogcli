@@ -5,27 +5,19 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
 )
 
 type Options struct {
 	Stdout io.Writer
 	Stderr io.Writer
-	Color  string // auto|always|never
 }
-
-const colorNever = "never"
 
 type UI struct {
 	out *Printer
 	err *Printer
 }
 
-type ParseError struct{ msg string }
-
-func (e *ParseError) Error() string { return e.msg }
-
-func New(opts Options) (*UI, error) {
+func New(opts Options) *UI {
 	if opts.Stdout == nil {
 		opts.Stdout = os.Stdout
 	}
@@ -33,31 +25,18 @@ func New(opts Options) (*UI, error) {
 		opts.Stderr = os.Stderr
 	}
 
-	mode := strings.ToLower(strings.TrimSpace(opts.Color))
-	if mode == "" {
-		mode = "auto"
-	}
-	if mode != "auto" && mode != "always" && mode != colorNever {
-		return nil, &ParseError{msg: "invalid --color (expected auto|always|never)"}
-	}
-
-	colorEnabled := mode == "always"
-
 	return &UI{
-		out: &Printer{w: opts.Stdout, color: colorEnabled},
-		err: &Printer{w: opts.Stderr, color: colorEnabled},
-	}, nil
+		out: &Printer{w: opts.Stdout},
+		err: &Printer{w: opts.Stderr},
+	}
 }
 
 func (u *UI) Out() *Printer { return u.out }
 func (u *UI) Err() *Printer { return u.err }
 
 type Printer struct {
-	w     io.Writer
-	color bool
+	w io.Writer
 }
-
-func (p *Printer) ColorEnabled() bool { return p.color }
 
 func (p *Printer) line(s string) {
 	_, _ = io.WriteString(p.w, s+"\n")

@@ -17,18 +17,12 @@ import (
 	"github.com/jared/mogcli/internal/ui"
 )
 
-const (
-	colorAuto  = "auto"
-	colorNever = "never"
-)
-
 type RootFlags struct {
-	Color          string `help:"Color output: auto|always|never" default:"${color}"`
 	Profile        string `name:"use-profile" help:"Profile name override for API commands" default:"${profile}"`
 	Client         string `help:"Logical client registration name" default:"${client}"`
 	EnableCommands string `help:"Comma-separated list of enabled top-level commands (restricts CLI)" default:"${enabled_commands}"`
 	JSON           bool   `help:"Output JSON to stdout (best for scripting)" default:"${json}"`
-	Plain          bool   `help:"Output stable, parseable text to stdout (TSV; no colors)" default:"${plain}"`
+	Plain          bool   `help:"Output stable, parseable text to stdout (TSV)" default:"${plain}"`
 	Force          bool   `help:"Skip confirmations for destructive commands"`
 	NoInput        bool   `help:"Never prompt; fail instead (useful for CI)"`
 	Verbose        bool   `help:"Enable verbose logging"`
@@ -102,15 +96,7 @@ func Execute(args []string) (err error) {
 	ctx = authclient.WithClient(ctx, cli.Client)
 	ctx = withRootFlags(ctx, &cli.RootFlags)
 
-	uiColor := cli.Color
-	if outfmt.IsJSON(ctx) || outfmt.IsPlain(ctx) {
-		uiColor = colorNever
-	}
-
-	u, err := ui.New(ui.Options{Stdout: os.Stdout, Stderr: os.Stderr, Color: uiColor})
-	if err != nil {
-		return err
-	}
+	u := ui.New(ui.Options{Stdout: os.Stdout, Stderr: os.Stderr})
 	ctx = ui.WithUI(ctx, u)
 
 	kctx.BindTo(ctx, (*context.Context)(nil))
@@ -158,7 +144,6 @@ func boolString(v bool) string {
 func newParser(description string) (*kong.Kong, *CLI, error) {
 	envMode := outfmt.FromEnv()
 	vars := kong.Vars{
-		"color":            envOr("MOG_COLOR", "auto"),
 		"profile":          envOr("MOG_PROFILE", ""),
 		"client":           envOr("MOG_CLIENT", ""),
 		"enabled_commands": envOr("MOG_ENABLE_COMMANDS", ""),

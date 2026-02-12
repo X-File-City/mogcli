@@ -11,6 +11,7 @@ Microsoft 365 in your terminal.
 - Single active profile model for predictable command behavior.
 - Delegated and app-only auth modes (enterprise app-only).
 - Stable `--json` and `--plain` output modes for scripting.
+- Unstyled plain-text terminal output (no color pipeline).
 - Built-in retry/backoff and clear, actionable API error output.
 
 ## Install
@@ -174,10 +175,11 @@ mog groups list --page "https://graph.microsoft.com/v1.0/groups?$skiptoken=..."
 
 ## Output Modes
 
-Default output is human-readable table/text.
+All terminal output is unstyled plain text (no color/styling pipeline).
+Default output remains human-readable table/text.
 
 - `--json`: structured JSON output.
-- `--plain`: stable parseable plain output (no color).
+- `--plain`: stable parseable plain output (TSV).
 
 Examples:
 
