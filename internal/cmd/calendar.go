@@ -75,10 +75,12 @@ func (c *CalendarGetCmd) Run(ctx context.Context) error {
 }
 
 type CalendarCreateCmd struct {
-	Subject string `name:"subject" required:"" help:"Event subject"`
-	Start   string `name:"start" required:"" help:"Start datetime (RFC3339)"`
-	End     string `name:"end" required:"" help:"End datetime (RFC3339)"`
-	Body    string `name:"body" help:"Optional body text"`
+	Subject   string   `name:"subject" required:"" help:"Event subject"`
+	Start     string   `name:"start" required:"" help:"Start datetime (RFC3339)"`
+	End       string   `name:"end" required:"" help:"End datetime (RFC3339)"`
+	Body      string   `name:"body" help:"Optional body text"`
+	Attendees []string `name:"attendee" help:"Attendee email (repeat for multiple)"`
+	Teams     bool     `name:"teams" help:"Add Teams meeting link"`
 }
 
 func (c *CalendarCreateCmd) Run(ctx context.Context) error {
@@ -101,6 +103,24 @@ func (c *CalendarCreateCmd) Run(ctx context.Context) error {
 	if strings.TrimSpace(c.Body) != "" {
 		payload["body"] = map[string]any{"contentType": "Text", "content": c.Body}
 	}
+	if len(c.Attendees) > 0 {
+		attendees := make([]map[string]any, 0, len(c.Attendees))
+		for _, email := range c.Attendees {
+			if strings.TrimSpace(email) != "" {
+				attendees = append(attendees, map[string]any{
+					"emailAddress": map[string]any{"address": strings.TrimSpace(email)},
+					"type":         "required",
+				})
+			}
+		}
+		if len(attendees) > 0 {
+			payload["attendees"] = attendees
+		}
+	}
+	if c.Teams {
+		payload["isOnlineMeeting"] = true
+		payload["onlineMeetingProvider"] = "teamsForBusiness"
+	}
 
 	svc := calendar.New(rt.Graph)
 	item, err := svc.Create(ctx, payload)
@@ -116,11 +136,13 @@ func (c *CalendarCreateCmd) Run(ctx context.Context) error {
 }
 
 type CalendarUpdateCmd struct {
-	ID      string `arg:"" required:"" help:"Event ID"`
-	Subject string `name:"subject" help:"Event subject"`
-	Start   string `name:"start" help:"Start datetime (RFC3339)"`
-	End     string `name:"end" help:"End datetime (RFC3339)"`
-	Body    string `name:"body" help:"Body text"`
+	ID        string   `arg:"" required:"" help:"Event ID"`
+	Subject   string   `name:"subject" help:"Event subject"`
+	Start     string   `name:"start" help:"Start datetime (RFC3339)"`
+	End       string   `name:"end" help:"End datetime (RFC3339)"`
+	Body      string   `name:"body" help:"Body text"`
+	Attendees []string `name:"attendee" help:"Attendee email (repeat for multiple)"`
+	Teams     bool     `name:"teams" help:"Add Teams meeting link"`
 }
 
 func (c *CalendarUpdateCmd) Run(ctx context.Context) error {
@@ -142,6 +164,24 @@ func (c *CalendarUpdateCmd) Run(ctx context.Context) error {
 	}
 	if strings.TrimSpace(c.Body) != "" {
 		payload["body"] = map[string]any{"contentType": "Text", "content": c.Body}
+	}
+	if len(c.Attendees) > 0 {
+		attendees := make([]map[string]any, 0, len(c.Attendees))
+		for _, email := range c.Attendees {
+			if strings.TrimSpace(email) != "" {
+				attendees = append(attendees, map[string]any{
+					"emailAddress": map[string]any{"address": strings.TrimSpace(email)},
+					"type":         "required",
+				})
+			}
+		}
+		if len(attendees) > 0 {
+			payload["attendees"] = attendees
+		}
+	}
+	if c.Teams {
+		payload["isOnlineMeeting"] = true
+		payload["onlineMeetingProvider"] = "teamsForBusiness"
 	}
 	if len(payload) == 0 {
 		return usage("provide at least one field to update")
