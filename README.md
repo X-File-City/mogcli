@@ -1,0 +1,1 @@
+# mogcli — Microsoft in your terminal
