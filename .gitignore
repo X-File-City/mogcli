@@ -3,3 +3,8 @@ opensrc/
 
 # build artifacts
 bin/
+dist/
+mog
+
+# secrets
+.env

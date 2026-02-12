@@ -1,7 +1,7 @@
 SHELL := /bin/bash
 .DEFAULT_GOAL := build
 
-.PHONY: build mog mog-help help fmt test ci vendor
+.PHONY: build mog mog-help help fmt fmt-check test ci vendor
 
 BIN_DIR := $(CURDIR)/bin
 BIN := $(BIN_DIR)/mog
@@ -41,10 +41,19 @@ help: mog-help
 fmt:
 	@gofmt -w cmd internal
 
+fmt-check:
+	@files="$$(gofmt -l cmd internal)"; \
+	if [ -n "$$files" ]; then \
+		echo "gofmt needs to be run on:"; \
+		echo "$$files"; \
+		echo "run: make fmt"; \
+		exit 1; \
+	fi
+
 test:
 	@$(GO) test $(GOFLAGS) $(TEST_PKGS)
 
 vendor:
 	@$(GO) mod vendor
 
-ci: fmt test
+ci: fmt-check test
