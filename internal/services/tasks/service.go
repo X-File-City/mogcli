@@ -3,11 +3,13 @@ package tasks
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
 
+	"github.com/jared/mogcli/internal/errfmt"
 	"github.com/jared/mogcli/internal/graph"
 )
 
@@ -56,19 +58,19 @@ func (s *Service) CreateTask(ctx context.Context, listID string, payload map[str
 	path := "/me/todo/lists/" + url.PathEscape(strings.TrimSpace(listID)) + "/tasks"
 	var created map[string]any
 	err := s.client.DoJSON(ctx, http.MethodPost, path, nil, payload, DelegatedScopes, &created)
-	return created, err
+	return created, normalizeTaskMutationError(err)
 }
 
 func (s *Service) UpdateTask(ctx context.Context, listID string, taskID string, payload map[string]any) error {
 	path := "/me/todo/lists/" + url.PathEscape(strings.TrimSpace(listID)) + "/tasks/" + url.PathEscape(strings.TrimSpace(taskID))
 	_, _, err := s.client.Do(ctx, http.MethodPatch, path, nil, payload, DelegatedScopes, nil)
-	return err
+	return normalizeTaskMutationError(err)
 }
 
 func (s *Service) DeleteTask(ctx context.Context, listID string, taskID string) error {
 	path := "/me/todo/lists/" + url.PathEscape(strings.TrimSpace(listID)) + "/tasks/" + url.PathEscape(strings.TrimSpace(taskID))
 	_, _, err := s.client.Do(ctx, http.MethodDelete, path, nil, nil, DelegatedScopes, nil)
-	return err
+	return normalizeTaskMutationError(err)
 }
 
 func decodeValuePage(body []byte) ([]map[string]any, string, error) {
@@ -88,4 +90,67 @@ func decodeValuePage(body []byte) ([]map[string]any, string, error) {
 
 	next, _ := payload["@odata.nextLink"].(string)
 	return items, strings.TrimSpace(next), nil
+}
+
+func normalizeTaskMutationError(err error) error {
+	if err == nil {
+		return nil
+	}
+
+	var apiErr *graph.APIError
+	if !errors.As(err, &apiErr) {
+		return err
+	}
+
+	if apiErr.Status != http.StatusBadRequest && apiErr.Status != http.StatusForbidden {
+		return err
+	}
+
+	if !isTaskMutabilityError(apiErr.Code, apiErr.Message) {
+		return err
+	}
+
+	return errfmt.NewUserFacingError(
+		"Built-in Microsoft To Do lists have mutability limits; use a custom list (`wellknownListName=none`) or another list.",
+		err,
+	)
+}
+
+func isTaskMutabilityError(code string, message string) bool {
+	lowerCode := strings.ToLower(strings.TrimSpace(code))
+	lowerMessage := strings.ToLower(strings.TrimSpace(message))
+
+	if strings.Contains(lowerCode, "readonly") || strings.Contains(lowerCode, "immutable") {
+		return true
+	}
+
+	if strings.Contains(lowerMessage, "wellknownlistname") {
+		return true
+	}
+
+	if strings.Contains(lowerMessage, "well-known") && strings.Contains(lowerMessage, "list") {
+		return true
+	}
+
+	if strings.Contains(lowerMessage, "built-in") && strings.Contains(lowerMessage, "list") {
+		return true
+	}
+
+	if strings.Contains(lowerMessage, "read-only") && strings.Contains(lowerMessage, "list") {
+		return true
+	}
+
+	if strings.Contains(lowerMessage, "immutable") && strings.Contains(lowerMessage, "list") {
+		return true
+	}
+
+	if strings.Contains(lowerMessage, "list") &&
+		(strings.Contains(lowerMessage, "cannot update") ||
+			strings.Contains(lowerMessage, "cannot be updated") ||
+			strings.Contains(lowerMessage, "cannot modify") ||
+			strings.Contains(lowerMessage, "cannot delete")) {
+		return true
+	}
+
+	return false
 }

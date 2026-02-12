@@ -27,7 +27,7 @@ type CalendarListCmd struct {
 
 func (c *CalendarListCmd) Run(ctx context.Context) error {
 	from, to := normalizeRange(c.From, c.To)
-	rt, err := resolveRuntime(ctx, false)
+	rt, err := resolveRuntime(ctx, capCalendarList)
 	if err != nil {
 		return err
 	}
@@ -52,7 +52,7 @@ type CalendarGetCmd struct {
 }
 
 func (c *CalendarGetCmd) Run(ctx context.Context) error {
-	rt, err := resolveRuntime(ctx, false)
+	rt, err := resolveRuntime(ctx, capCalendarGet)
 	if err != nil {
 		return err
 	}
@@ -84,7 +84,7 @@ func (c *CalendarCreateCmd) Run(ctx context.Context) error {
 		return usage("--end must be RFC3339")
 	}
 
-	rt, err := resolveRuntime(ctx, false)
+	rt, err := resolveRuntime(ctx, capCalendarCreate)
 	if err != nil {
 		return err
 	}
@@ -142,7 +142,7 @@ func (c *CalendarUpdateCmd) Run(ctx context.Context) error {
 		return usage("provide at least one field to update")
 	}
 
-	rt, err := resolveRuntime(ctx, false)
+	rt, err := resolveRuntime(ctx, capCalendarUpdate)
 	if err != nil {
 		return err
 	}
@@ -172,7 +172,7 @@ func (c *CalendarDeleteCmd) Run(ctx context.Context) error {
 		return err
 	}
 
-	rt, err := resolveRuntime(ctx, false)
+	rt, err := resolveRuntime(ctx, capCalendarDelete)
 	if err != nil {
 		return err
 	}

@@ -26,7 +26,7 @@ type OneDriveListCmd struct {
 }
 
 func (c *OneDriveListCmd) Run(ctx context.Context) error {
-	rt, err := resolveRuntime(ctx, false)
+	rt, err := resolveRuntime(ctx, capOneDriveLS)
 	if err != nil {
 		return err
 	}
@@ -52,7 +52,7 @@ type OneDriveGetCmd struct {
 }
 
 func (c *OneDriveGetCmd) Run(ctx context.Context) error {
-	rt, err := resolveRuntime(ctx, false)
+	rt, err := resolveRuntime(ctx, capOneDriveGet)
 	if err != nil {
 		return err
 	}
@@ -100,7 +100,7 @@ type OneDrivePutCmd struct {
 }
 
 func (c *OneDrivePutCmd) Run(ctx context.Context) error {
-	rt, err := resolveRuntime(ctx, false)
+	rt, err := resolveRuntime(ctx, capOneDrivePut)
 	if err != nil {
 		return err
 	}
@@ -133,7 +133,7 @@ type OneDriveMkdirCmd struct {
 }
 
 func (c *OneDriveMkdirCmd) Run(ctx context.Context) error {
-	rt, err := resolveRuntime(ctx, false)
+	rt, err := resolveRuntime(ctx, capOneDriveMkdir)
 	if err != nil {
 		return err
 	}
@@ -164,7 +164,7 @@ func (c *OneDriveRmCmd) Run(ctx context.Context) error {
 		return err
 	}
 
-	rt, err := resolveRuntime(ctx, false)
+	rt, err := resolveRuntime(ctx, capOneDriveRM)
 	if err != nil {
 		return err
 	}

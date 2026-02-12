@@ -23,7 +23,7 @@ type ContactsListCmd struct {
 }
 
 func (c *ContactsListCmd) Run(ctx context.Context) error {
-	rt, err := resolveRuntime(ctx, false)
+	rt, err := resolveRuntime(ctx, capContactsList)
 	if err != nil {
 		return err
 	}
@@ -47,7 +47,7 @@ type ContactsGetCmd struct {
 }
 
 func (c *ContactsGetCmd) Run(ctx context.Context) error {
-	rt, err := resolveRuntime(ctx, false)
+	rt, err := resolveRuntime(ctx, capContactsGet)
 	if err != nil {
 		return err
 	}
@@ -71,7 +71,7 @@ type ContactsCreateCmd struct {
 }
 
 func (c *ContactsCreateCmd) Run(ctx context.Context) error {
-	rt, err := resolveRuntime(ctx, false)
+	rt, err := resolveRuntime(ctx, capContactsCreate)
 	if err != nil {
 		return err
 	}
@@ -122,7 +122,7 @@ func (c *ContactsUpdateCmd) Run(ctx context.Context) error {
 		return usage("provide at least one field to update")
 	}
 
-	rt, err := resolveRuntime(ctx, false)
+	rt, err := resolveRuntime(ctx, capContactsUpdate)
 	if err != nil {
 		return err
 	}
@@ -150,7 +150,7 @@ func (c *ContactsDeleteCmd) Run(ctx context.Context) error {
 		return err
 	}
 
-	rt, err := resolveRuntime(ctx, false)
+	rt, err := resolveRuntime(ctx, capContactsDelete)
 	if err != nil {
 		return err
 	}

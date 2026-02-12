@@ -22,7 +22,7 @@ type MailListCmd struct {
 }
 
 func (c *MailListCmd) Run(ctx context.Context) error {
-	rt, err := resolveRuntime(ctx, false)
+	rt, err := resolveRuntime(ctx, capMailList)
 	if err != nil {
 		return err
 	}
@@ -47,7 +47,7 @@ type MailGetCmd struct {
 }
 
 func (c *MailGetCmd) Run(ctx context.Context) error {
-	rt, err := resolveRuntime(ctx, false)
+	rt, err := resolveRuntime(ctx, capMailGet)
 	if err != nil {
 		return err
 	}
@@ -73,7 +73,7 @@ type MailSendCmd struct {
 }
 
 func (c *MailSendCmd) Run(ctx context.Context) error {
-	rt, err := resolveRuntime(ctx, false)
+	rt, err := resolveRuntime(ctx, capMailSend)
 	if err != nil {
 		return err
 	}

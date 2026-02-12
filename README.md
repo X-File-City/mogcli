@@ -189,8 +189,8 @@ Secrets and tokens are stored in OS keychain/keyring when available, with secure
 `mogcli` uses least-privilege scopes per command group. Some Graph capabilities differ by account type or auth mode:
 
 - Groups are enterprise/work accounts only.
-- Some endpoints are delegated-only.
-- App-only support is limited to workloads/endpoints that Graph allows.
+- Current `/me`-based commands (`mail`, `calendar`, `contacts`, `tasks`, `onedrive`) are delegated-only and fail fast in app-only mode with guidance to switch to a delegated profile.
+- App-only support is limited to workloads/endpoints that Graph allows, and broader `/me` routing substitutions are planned for a later phase.
 
 `mog` help output includes required scopes for each command.
 

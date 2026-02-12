@@ -19,7 +19,7 @@ type GroupsListCmd struct {
 }
 
 func (c *GroupsListCmd) Run(ctx context.Context) error {
-	rt, err := resolveRuntime(ctx, true)
+	rt, err := resolveRuntime(ctx, capGroupsList)
 	if err != nil {
 		return err
 	}
@@ -42,7 +42,7 @@ type GroupsGetCmd struct {
 }
 
 func (c *GroupsGetCmd) Run(ctx context.Context) error {
-	rt, err := resolveRuntime(ctx, true)
+	rt, err := resolveRuntime(ctx, capGroupsGet)
 	if err != nil {
 		return err
 	}
@@ -65,7 +65,7 @@ type GroupsMembersCmd struct {
 }
 
 func (c *GroupsMembersCmd) Run(ctx context.Context) error {
-	rt, err := resolveRuntime(ctx, true)
+	rt, err := resolveRuntime(ctx, capGroupsMembers)
 	if err != nil {
 		return err
 	}

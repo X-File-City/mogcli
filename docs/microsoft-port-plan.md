@@ -1,8 +1,16 @@
 # mogcli Microsoft Port Plan (Revision 2)
 
 Date: 2026-02-12
-Status: implementation-ready
+Status: implementation-ready (runtime capability matrix and task mutability error normalization implemented)
 Audience: Codex agents implementing `mogcli`
+
+## Implementation status update (2026-02-12)
+
+Implemented in codebase:
+
+1. Command-level capability matrix enforcement in `internal/cmd/runtime.go` for all current workload commands.
+2. Fail-fast app-only gating for delegated-only `/me` workloads with actionable user-facing messages.
+3. Task mutation mutability error normalization in `internal/services/tasks/service.go` for built-in/well-known Microsoft To Do list constraints.
 
 ## 0. Critique of the prior plan
 

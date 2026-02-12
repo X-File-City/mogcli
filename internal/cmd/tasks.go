@@ -23,7 +23,7 @@ type TasksCmd struct {
 type TasksListsCmd struct{}
 
 func (c *TasksListsCmd) Run(ctx context.Context) error {
-	rt, err := resolveRuntime(ctx, false)
+	rt, err := resolveRuntime(ctx, capTasksLists)
 	if err != nil {
 		return err
 	}
@@ -45,7 +45,7 @@ type TasksListCmd struct {
 }
 
 func (c *TasksListCmd) Run(ctx context.Context) error {
-	rt, err := resolveRuntime(ctx, false)
+	rt, err := resolveRuntime(ctx, capTasksList)
 	if err != nil {
 		return err
 	}
@@ -68,7 +68,7 @@ type TasksGetCmd struct {
 }
 
 func (c *TasksGetCmd) Run(ctx context.Context) error {
-	rt, err := resolveRuntime(ctx, false)
+	rt, err := resolveRuntime(ctx, capTasksGet)
 	if err != nil {
 		return err
 	}
@@ -90,7 +90,7 @@ type TasksCreateCmd struct {
 }
 
 func (c *TasksCreateCmd) Run(ctx context.Context) error {
-	rt, err := resolveRuntime(ctx, false)
+	rt, err := resolveRuntime(ctx, capTasksCreate)
 	if err != nil {
 		return err
 	}
@@ -128,7 +128,7 @@ func (c *TasksUpdateCmd) Run(ctx context.Context) error {
 		return usage("provide at least one field to update")
 	}
 
-	rt, err := resolveRuntime(ctx, false)
+	rt, err := resolveRuntime(ctx, capTasksUpdate)
 	if err != nil {
 		return err
 	}
@@ -149,7 +149,7 @@ type TasksCompleteCmd struct {
 }
 
 func (c *TasksCompleteCmd) Run(ctx context.Context) error {
-	rt, err := resolveRuntime(ctx, false)
+	rt, err := resolveRuntime(ctx, capTasksComplete)
 	if err != nil {
 		return err
 	}
@@ -179,7 +179,7 @@ func (c *TasksDeleteCmd) Run(ctx context.Context) error {
 		return err
 	}
 
-	rt, err := resolveRuntime(ctx, false)
+	rt, err := resolveRuntime(ctx, capTasksDelete)
 	if err != nil {
 		return err
 	}
