@@ -1,0 +1,7 @@
+This project incorporates and adapts portions of code from:
+- https://github.com/steipete/gogcli (MIT License)
+
+Copied/adapted components include CLI shell, output helpers, config plumbing,
+keyring integration patterns, and completion/help scaffolding.
+
+See upstream repository for original copyright notices and license text.
