@@ -1,6 +1,5 @@
-# opensrc - source code for packages
-opensrc/*
-!opensrc/go.mod
+# opensrc - local source references (not part of module deps)
+opensrc/
 
 # build artifacts
 bin/

@@ -1,11 +1,14 @@
 SHELL := /bin/bash
 .DEFAULT_GOAL := build
 
-.PHONY: build mog mog-help help fmt test ci
+.PHONY: build mog mog-help help fmt test ci vendor
 
 BIN_DIR := $(CURDIR)/bin
 BIN := $(BIN_DIR)/mog
 CMD := ./cmd/mog
+GO := go
+GOFLAGS ?= -mod=vendor
+TEST_PKGS := ./cmd/... ./internal/...
 
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 COMMIT := $(shell git rev-parse --short=12 HEAD 2>/dev/null || echo "")
@@ -19,7 +22,7 @@ endif
 
 build:
 	@mkdir -p $(BIN_DIR)
-	@go build -ldflags "$(LDFLAGS)" -o $(BIN) $(CMD)
+	@$(GO) build $(GOFLAGS) -ldflags "$(LDFLAGS)" -o $(BIN) $(CMD)
 
 mog: build
 	@if [ -n "$(RUN_ARGS)" ]; then \
@@ -39,6 +42,9 @@ fmt:
 	@gofmt -w cmd internal
 
 test:
-	@go test ./...
+	@$(GO) test $(GOFLAGS) $(TEST_PKGS)
+
+vendor:
+	@$(GO) mod vendor
 
 ci: fmt test
