@@ -41,15 +41,20 @@ var newProfileStore = func() profileStore {
 }
 
 type AuthCmd struct {
-	Login  AuthLoginCmd  `cmd:"" default:"1" help:"Log in to a Microsoft account"`
-	Logout AuthLogoutCmd `cmd:"" help:"Log out of a Microsoft account"`
-	Status AuthStatusCmd `cmd:"" help:"Display active account and login status"`
-	Use    AuthUseCmd    `cmd:"" help:"Switch the active profile"`
+	Wizard AuthWizardCmd    `cmd:"" default:"1" hidden:"" help:"Interactive delegated authentication setup"`
+	App    AuthAppWizardCmd `cmd:"" name:"app" help:"Interactive enterprise app-only setup (advanced)"`
+	Login  AuthLoginCmd     `cmd:"" help:"Login and save profile credentials"`
+	Logout AuthLogoutCmd    `cmd:"" help:"Log out of a Microsoft account"`
+	Status AuthStatusCmd    `cmd:"" help:"Display active account and login status"`
+	Use    AuthUseCmd       `cmd:"" help:"Switch the active profile"`
 
 	// Hidden aliases for backwards compatibility.
 	Accounts AuthStatusCmd `cmd:"" hidden:"" help:"List saved profiles"`
 	WhoAmI   AuthStatusCmd `cmd:"" aliases:"whoami" hidden:"" help:"Show active profile"`
 }
+
+type AuthWizardCmd struct{}
+type AuthAppWizardCmd struct{}
 
 type AuthLoginCmd struct {
 	Profile         string `name:"profile" help:"Profile name (e.g. personal, work)"`
@@ -79,14 +84,50 @@ type authLoginParams struct {
 }
 
 func (c *AuthLoginCmd) Run(ctx context.Context) error {
+	mode := normalizeAuthMode(c.Mode)
+	if mode == "" {
+		mode = profile.AuthModeDelegated
+	}
+
 	flags := rootFlagsFromContext(ctx)
 	noInput := flags != nil && flags.NoInput
 	interactive := !noInput && isTerminal(os.Stdin) && c.needsPrompt()
 
 	if interactive {
+		if mode == profile.AuthModeAppOnly {
+			return usage("interactive app-only onboarding is available via `mog auth app`; use `mog auth login --mode app-only ...` for non-interactive setup")
+		}
 		return c.runInteractive(ctx)
 	}
 	return c.runNonInteractive(ctx)
+}
+
+func (c *AuthWizardCmd) Run(ctx context.Context) error {
+	return runAuthWizard(ctx, profile.AuthModeDelegated)
+}
+
+func (c *AuthAppWizardCmd) Run(ctx context.Context) error {
+	return runAuthWizard(ctx, profile.AuthModeAppOnly)
+}
+
+func runAuthWizard(ctx context.Context, mode string) error {
+	wizardCommand := "`mog auth`"
+	cmd := AuthLoginCmd{Mode: profile.AuthModeDelegated}
+	if mode == profile.AuthModeAppOnly {
+		wizardCommand = "`mog auth app`"
+		cmd.Mode = profile.AuthModeAppOnly
+		cmd.Audience = profile.AudienceEnterprise
+	}
+
+	flags := rootFlagsFromContext(ctx)
+	if flags != nil && flags.NoInput {
+		return usagef("%s requires interactive input. Use `mog auth login ...` for non-interactive usage", wizardCommand)
+	}
+	if !isTerminal(os.Stdin) {
+		return usagef("%s requires an interactive terminal. Use `mog auth login ...` for non-interactive usage", wizardCommand)
+	}
+
+	return cmd.runInteractive(ctx)
 }
 
 // needsPrompt returns true if any required interactive field is missing.
@@ -101,9 +142,19 @@ func (c *AuthLoginCmd) runInteractive(ctx context.Context) error {
 	printWizardMessage(ctx, theme.dim("Tip: you'll need an Entra app registration. See https://github.com/jaredpalmer/mogcli#setup"))
 	fmt.Fprintln(os.Stderr)
 
+	mode := normalizeAuthMode(c.Mode)
+	if mode == "" {
+		mode = profile.AuthModeDelegated
+	}
+
 	// 1. Audience
 	audience := strings.TrimSpace(c.Audience)
-	if audience == "" {
+	if mode == profile.AuthModeAppOnly {
+		if audience != "" && !strings.EqualFold(audience, profile.AudienceEnterprise) {
+			return usage("app-only mode requires enterprise audience")
+		}
+		audience = profile.AudienceEnterprise
+	} else if audience == "" {
 		var err error
 		audience, err = promptAudience(ctx, profile.AudienceConsumer)
 		if err != nil {
@@ -111,22 +162,7 @@ func (c *AuthLoginCmd) runInteractive(ctx context.Context) error {
 		}
 	}
 
-	// 2. Auth mode — enterprise users get a choice; consumer is always delegated
-	mode := normalizeAuthMode(c.Mode)
-	if audience == profile.AudienceEnterprise && mode == profile.AuthModeDelegated {
-		selected, err := input.SelectString(ctx, input.SelectStringConfig{
-			Title: "What auth mode?",
-			Options: []input.SelectStringOption{
-				{Label: "Delegated (user sign-in)", Value: profile.AuthModeDelegated},
-				{Label: "App-only (daemon / service)", Value: profile.AuthModeAppOnly},
-			},
-			Default: profile.AuthModeDelegated,
-		})
-		if err != nil {
-			return wrapPromptInputErr("select auth mode", err)
-		}
-		mode = selected
-	}
+	// 2. Auth mode is selected by command (`mog auth` for delegated, `mog auth app` for app-only).
 
 	// 3. Client ID
 	clientID := strings.TrimSpace(c.ClientID)

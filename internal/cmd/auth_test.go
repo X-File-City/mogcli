@@ -52,6 +52,21 @@ func TestAuthLoginNonInteractiveRequiresFlags(t *testing.T) {
 	}
 }
 
+func TestAuthAppWizardRejectsNoInput(t *testing.T) {
+	ctx := withRootFlags(context.Background(), &RootFlags{NoInput: true})
+	err := (&AuthAppWizardCmd{}).Run(ctx)
+	if err == nil {
+		t.Fatal("expected usage error")
+	}
+	var exitErr *ExitError
+	if !errors.As(err, &exitErr) || exitErr.Code != 2 {
+		t.Fatalf("expected usage ExitError code 2, got %v", err)
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "interactive input") {
+		t.Fatalf("expected interactive input guidance, got %v", err)
+	}
+}
+
 func TestAuthLoginDelegatedRequiresScopeWorkloads(t *testing.T) {
 	ctx := withRootFlags(context.Background(), &RootFlags{NoInput: true})
 	cmd := AuthLoginCmd{

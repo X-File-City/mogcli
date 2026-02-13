@@ -64,6 +64,16 @@ func TestSubcommandHelpShowsInheritedFlagsAndExamples(t *testing.T) {
 	}
 }
 
+func TestAuthHelpIncludesAppSubcommand(t *testing.T) {
+	stdout, _, err := captureExecuteOutput(t, []string{"auth", "--help"})
+	if err != nil {
+		t.Fatalf("Execute(auth --help) failed: %v", err)
+	}
+	if !strings.Contains(stdout, "app") {
+		t.Fatalf("expected auth help to include app subcommand, got:\n%s", stdout)
+	}
+}
+
 func TestRemovedColorFlagIsUnknownUsageError(t *testing.T) {
 	_, stderr, err := captureExecuteOutput(t, []string{"--color", "always", "version"})
 	if err == nil {

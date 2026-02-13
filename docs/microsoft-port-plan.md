@@ -9,7 +9,7 @@ Audience: Codex agents implementing `mogcli`
 Implemented in codebase:
 
 1. Command-level capability matrix enforcement in `internal/cmd/runtime.go` for all current workload commands.
-2. Interactive default `mog auth` delegated wizard with workload-group delegated scope selection, plus advanced app-only wizard via `mog auth --app`.
+2. Interactive default `mog auth` delegated wizard with workload-group delegated scope selection, plus advanced app-only wizard via `mog auth app`.
 3. Scripted `mog auth login` delegated bootstrap with required `--scope-workloads`.
 4. Profile metadata persistence for delegated bootstrap workloads and app-only default target user.
 5. Progressive delegated consent via per-operation minimal scopes (no broad default command scopes).
@@ -136,7 +136,7 @@ Use per-profile token cache key namespace:
 
 Phase-1 command surface:
 
-1. `mog auth` (interactive delegated wizard) and `mog auth --app` (interactive enterprise app-only wizard).
+1. `mog auth` (interactive delegated wizard) and `mog auth app` (interactive enterprise app-only wizard).
 2. `mog auth login --profile <name> --audience consumer|enterprise --client-id <id> --scope-workloads <csv> [--tenant <tenant>] [--authority ...]`
 3. `mog auth login --mode app-only --app-only-user <upn-or-id> ...` for profile-level app-only target-user defaults.
 4. `mog auth logout [--profile <name>|--all]`
