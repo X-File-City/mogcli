@@ -9,3 +9,7 @@ When preparing release `X.Y.Z`, add a section with this format:
 The release scripts read that section and publish it as GitHub release notes.
 
 ## Unreleased
+
+## 0.0.1 - 2026-02-13
+
+- Initial release.
