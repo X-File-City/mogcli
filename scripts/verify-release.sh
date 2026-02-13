@@ -97,15 +97,28 @@ if [[ -f "$formula_path" ]]; then
     ' "$formula_path"
   }
 
+  formula_sha_for_asset() {
+    local concrete_asset="$1"
+    local templated_asset="$2"
+    local sha
+
+    sha="$(formula_sha_for_url "$concrete_asset")"
+    if [[ -z "$sha" ]]; then
+      sha="$(formula_sha_for_url "$templated_asset")"
+    fi
+
+    printf '%s' "$sha"
+  }
+
   darwin_amd64_expected="$(sha_for_asset "mogcli_${version}_darwin_amd64.tar.gz")"
   darwin_arm64_expected="$(sha_for_asset "mogcli_${version}_darwin_arm64.tar.gz")"
   linux_amd64_expected="$(sha_for_asset "mogcli_${version}_linux_amd64.tar.gz")"
   linux_arm64_expected="$(sha_for_asset "mogcli_${version}_linux_arm64.tar.gz")"
 
-  darwin_amd64_formula="$(formula_sha_for_url "mogcli_#{version}_darwin_amd64.tar.gz")"
-  darwin_arm64_formula="$(formula_sha_for_url "mogcli_#{version}_darwin_arm64.tar.gz")"
-  linux_amd64_formula="$(formula_sha_for_url "mogcli_#{version}_linux_amd64.tar.gz")"
-  linux_arm64_formula="$(formula_sha_for_url "mogcli_#{version}_linux_arm64.tar.gz")"
+  darwin_amd64_formula="$(formula_sha_for_asset "mogcli_${version}_darwin_amd64.tar.gz" "mogcli_#{version}_darwin_amd64.tar.gz")"
+  darwin_arm64_formula="$(formula_sha_for_asset "mogcli_${version}_darwin_arm64.tar.gz" "mogcli_#{version}_darwin_arm64.tar.gz")"
+  linux_amd64_formula="$(formula_sha_for_asset "mogcli_${version}_linux_amd64.tar.gz" "mogcli_#{version}_linux_amd64.tar.gz")"
+  linux_arm64_formula="$(formula_sha_for_asset "mogcli_${version}_linux_arm64.tar.gz" "mogcli_#{version}_linux_arm64.tar.gz")"
 
   if [[ "$darwin_amd64_formula" != "$darwin_amd64_expected" ]]; then
     echo "formula sha mismatch (darwin_amd64): $darwin_amd64_formula (expected $darwin_amd64_expected)" >&2
