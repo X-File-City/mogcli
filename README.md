@@ -10,7 +10,7 @@ Microsoft 365 in your terminal.
 - Consumer and enterprise audiences.
 - Delegated user auth and enterprise app-only auth.
 - Stable scripting output modes: `--json` and `--plain`.
-- Interactive delegated wizard (`mog auth`), advanced app-only wizard (`mog auth app`), and non-interactive login (`mog auth login`).
+- Interactive delegated wizard (`mog auth`), advanced app-only wizard (`mog auth app`), settings editor (`mog auth update`), and non-interactive login (`mog auth login`).
 - Per-command scope requests in delegated mode (progressive consent).
 
 ### Workload support matrix
@@ -45,6 +45,14 @@ go build -o bin/mog ./cmd/mog
 
 ```bash
 go install github.com/jaredpalmer/mogcli/cmd/mog@latest
+mog --help
+```
+
+### Option 3: Homebrew
+
+```bash
+brew tap jaredpalmer/tap
+brew install jaredpalmer/tap/mogcli
 mog --help
 ```
 
@@ -135,11 +143,20 @@ For one-off command routing without switching active profile:
 mog --use-profile work mail list --max 10
 ```
 
+### 5) Update existing auth settings without full re-onboarding
+
+```bash
+mog auth update
+mog auth update --profile work
+```
+
+The update flow shows current settings, lets you choose one field at a time to edit, and saves only selected changes.
+
 ## Command overview
 
 - `mog auth`
 - `mog auth app`
-- `mog auth login|logout|accounts|use|whoami`
+- `mog auth login|update|logout|accounts|use|whoami`
 - `mog mail list|get|send`
 - `mog calendar list|get|create|update|delete`
 - `mog contacts list|get|create|update|delete`

@@ -10,13 +10,14 @@ Implemented in codebase:
 
 1. Command-level capability matrix enforcement in `internal/cmd/runtime.go` for all current workload commands.
 2. Interactive default `mog auth` delegated wizard with workload-group delegated scope selection, plus advanced app-only wizard via `mog auth app`.
-3. Scripted `mog auth login` delegated bootstrap with required `--scope-workloads`.
-4. Profile metadata persistence for delegated bootstrap workloads and app-only default target user.
-5. Progressive delegated consent via per-operation minimal scopes (no broad default command scopes).
-6. Delegated token restore hardening: cached scope coverage checks, refresh on missing scope, account/tenant consistency validation, and cache purge on mismatch.
-7. App-only endpoint routing for mail/contacts/onedrive using `/users/{id}` with `--user` override and profile fallback.
-8. Explicit fail-fast app-only rejection for calendar/tasks with deterministic user-facing guidance.
-9. Task mutation mutability error normalization in `internal/services/tasks/service.go` for built-in/well-known Microsoft To Do list constraints.
+3. Interactive `mog auth update` flow to review current profile settings and edit selected fields without full re-onboarding.
+4. Scripted `mog auth login` delegated bootstrap with required `--scope-workloads`.
+5. Profile metadata persistence for delegated bootstrap workloads and app-only default target user.
+6. Progressive delegated consent via per-operation minimal scopes (no broad default command scopes).
+7. Delegated token restore hardening: cached scope coverage checks, refresh on missing scope, account/tenant consistency validation, and cache purge on mismatch.
+8. App-only endpoint routing for mail/contacts/onedrive using `/users/{id}` with `--user` override and profile fallback.
+9. Explicit fail-fast app-only rejection for calendar/tasks with deterministic user-facing guidance.
+10. Task mutation mutability error normalization in `internal/services/tasks/service.go` for built-in/well-known Microsoft To Do list constraints.
 
 ## 0. Critique of the prior plan
 
@@ -137,12 +138,13 @@ Use per-profile token cache key namespace:
 Phase-1 command surface:
 
 1. `mog auth` (interactive delegated wizard) and `mog auth app` (interactive enterprise app-only wizard).
-2. `mog auth login --profile <name> --audience consumer|enterprise --client-id <id> --scope-workloads <csv> [--tenant <tenant>] [--authority ...]`
-3. `mog auth login --mode app-only --app-only-user <upn-or-id> ...` for profile-level app-only target-user defaults.
-4. `mog auth logout [--profile <name>|--all]`
-5. `mog auth accounts`
-6. `mog auth use <profile-name>`
-7. `mog auth whoami`
+2. `mog auth update [--profile <name>]` to review current settings and edit selected fields.
+3. `mog auth login --profile <name> --audience consumer|enterprise --client-id <id> --scope-workloads <csv> [--tenant <tenant>] [--authority ...]`
+4. `mog auth login --mode app-only --app-only-user <upn-or-id> ...` for profile-level app-only target-user defaults.
+5. `mog auth logout [--profile <name>|--all]`
+6. `mog auth accounts`
+7. `mog auth use <profile-name>`
+8. `mog auth whoami`
 
 Phase-2 additions:
 
@@ -234,7 +236,7 @@ Tasks:
 1. Implement `internal/profile` store with single-active-profile invariant.
 2. Implement `internal/auth` delegated device-code login flow.
 3. Implement account mismatch protection and cache invalidation semantics inspired by `m365-mcp-suite` [MCP1], [MCP2].
-4. Implement `auth login/logout/accounts/use/whoami` commands.
+4. Implement `auth login/update/logout/status/use` commands (with `accounts/whoami` compatibility aliases).
 5. Implement secure token persistence through `internal/secrets`.
 
 Exit criteria:
@@ -392,9 +394,8 @@ Mitigation: phase-scoped command surface and migration guide before expansion [G
 
 These are still open and should be resolved before phase-0 implementation begins:
 
-1. Distribution target for milestone 1: local binary only or include Homebrew packaging.
-2. Login UX preference: device-code only, or also support localhost browser callback in phase 1.
-3. Command naming finalization: keep noun-first (`mog mail list`) or align more tightly with `gogcli` patterns.
+1. Login UX preference: device-code only, or also support localhost browser callback in phase 1.
+2. Command naming finalization: keep noun-first (`mog mail list`) or align more tightly with `gogcli` patterns.
 
 ## 12. Citation index
 

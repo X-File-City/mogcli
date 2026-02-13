@@ -74,6 +74,16 @@ func TestAuthHelpIncludesAppSubcommand(t *testing.T) {
 	}
 }
 
+func TestAuthHelpIncludesUpdateSubcommand(t *testing.T) {
+	stdout, _, err := captureExecuteOutput(t, []string{"auth", "--help"})
+	if err != nil {
+		t.Fatalf("Execute(auth --help) failed: %v", err)
+	}
+	if !strings.Contains(stdout, "update") {
+		t.Fatalf("expected auth help to include update subcommand, got:\n%s", stdout)
+	}
+}
+
 func TestRemovedColorFlagIsUnknownUsageError(t *testing.T) {
 	_, stderr, err := captureExecuteOutput(t, []string{"--color", "always", "version"})
 	if err == nil {

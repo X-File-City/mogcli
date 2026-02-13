@@ -44,6 +44,7 @@ type AuthCmd struct {
 	Wizard AuthWizardCmd    `cmd:"" default:"1" hidden:"" help:"Interactive delegated authentication setup"`
 	App    AuthAppWizardCmd `cmd:"" name:"app" help:"Interactive enterprise app-only setup (advanced)"`
 	Login  AuthLoginCmd     `cmd:"" help:"Login and save profile credentials"`
+	Update AuthUpdateCmd    `cmd:"" help:"Review current auth settings and update selected fields"`
 	Logout AuthLogoutCmd    `cmd:"" help:"Log out of a Microsoft account"`
 	Status AuthStatusCmd    `cmd:"" help:"Display active account and login status"`
 	Use    AuthUseCmd       `cmd:"" help:"Switch the active profile"`
@@ -55,6 +56,9 @@ type AuthCmd struct {
 
 type AuthWizardCmd struct{}
 type AuthAppWizardCmd struct{}
+type AuthUpdateCmd struct {
+	Profile string `name:"profile" help:"Profile name to update (defaults to active profile)"`
+}
 
 type AuthLoginCmd struct {
 	Profile         string `name:"profile" help:"Profile name (e.g. personal, work)"`
@@ -660,6 +664,306 @@ func (c *AuthStatusCmd) Run(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (c *AuthUpdateCmd) Run(ctx context.Context) error {
+	flags := rootFlagsFromContext(ctx)
+	if flags != nil && flags.NoInput {
+		return usage("`mog auth update` requires interactive input")
+	}
+	if !isTerminal(os.Stdin) {
+		return usage("`mog auth update` requires an interactive terminal")
+	}
+
+	store := newProfileStore()
+	current, err := resolveProfileForUpdate(store, c.Profile)
+	if err != nil {
+		return err
+	}
+	updated := current
+	theme := newAuthWizardTheme()
+
+	for {
+		printWizardMessage(ctx, renderAuthUpdateSummary(theme, updated))
+		choice, err := input.SelectString(ctx, input.SelectStringConfig{
+			Title:       "Update auth setting",
+			Description: "Select one field to edit, then choose Save changes.",
+			Default:     "client-id",
+			Options:     authUpdateOptions(updated),
+		})
+		if err != nil {
+			return wrapPromptInputErr("select auth setting", err)
+		}
+
+		switch strings.TrimSpace(choice) {
+		case "audience":
+			audience, promptErr := promptAudience(ctx, updated.Audience)
+			if promptErr != nil {
+				return promptErr
+			}
+			updated.Audience = audience
+			if strings.EqualFold(updated.Audience, profile.AudienceConsumer) {
+				updated.TenantID = ""
+				updated.DelegatedScopeWorkloads = removeGroupsWorkload(updated.DelegatedScopeWorkloads)
+				if normalizeAuthMode(updated.AuthMode) == profile.AuthModeAppOnly {
+					updated.AuthMode = profile.AuthModeDelegated
+					updated.AppOnlyUser = ""
+					printWizardMessage(ctx, theme.warn("Consumer audience does not support app-only mode. Switched mode to delegated."))
+				}
+			}
+		case "mode":
+			mode, promptErr := promptUpdateAuthMode(ctx, updated.Audience, updated.AuthMode)
+			if promptErr != nil {
+				return promptErr
+			}
+			updated.AuthMode = mode
+			if mode == profile.AuthModeAppOnly {
+				updated.Audience = profile.AudienceEnterprise
+				updated.DelegatedScopeWorkloads = nil
+			} else {
+				updated.AppOnlyUser = ""
+				if len(updated.DelegatedScopeWorkloads) == 0 {
+					workloads, workloadErr := promptDelegatedWorkloads(ctx, updated.Audience, []string{"mail"})
+					if workloadErr != nil {
+						return workloadErr
+					}
+					updated.DelegatedScopeWorkloads = workloads
+				}
+			}
+		case "client-id":
+			clientID, promptErr := promptRequiredValue(ctx, "Application (client) ID", strings.TrimSpace(updated.ClientID))
+			if promptErr != nil {
+				return promptErr
+			}
+			updated.ClientID = clientID
+		case "tenant":
+			tenant, promptErr := promptOptionalValue(ctx, "Tenant ID or domain (enterprise)", strings.TrimSpace(updated.TenantID))
+			if promptErr != nil {
+				return promptErr
+			}
+			updated.TenantID = tenant
+			if strings.EqualFold(updated.Audience, profile.AudienceConsumer) {
+				updated.TenantID = ""
+			}
+		case "authority":
+			authority, promptErr := promptOptionalValue(ctx, "Authority override (optional)", strings.TrimSpace(updated.Authority))
+			if promptErr != nil {
+				return promptErr
+			}
+			updated.Authority = authority
+		case "workloads":
+			defaults := updated.DelegatedScopeWorkloads
+			if len(defaults) == 0 {
+				defaults = []string{"mail"}
+			}
+			workloads, workloadErr := promptDelegatedWorkloads(ctx, updated.Audience, defaults)
+			if workloadErr != nil {
+				return workloadErr
+			}
+			updated.DelegatedScopeWorkloads = workloads
+		case "app-only-user":
+			appOnlyUser, promptErr := promptOptionalValue(ctx, "Default target user (UPN or user ID, optional)", strings.TrimSpace(updated.AppOnlyUser))
+			if promptErr != nil {
+				return promptErr
+			}
+			updated.AppOnlyUser = appOnlyUser
+		case "save":
+			if err := validateUpdatedProfile(updated); err != nil {
+				return err
+			}
+
+			updated.Active = current.Active
+			makeActive := current.Active
+			if err := store.Upsert(updated, makeActive); err != nil {
+				return err
+			}
+
+			changedAuth := authSettingsChanged(current, updated)
+			if outfmt.IsJSON(ctx) {
+				return outfmt.WriteJSON(os.Stdout, map[string]any{
+					"profile":      updated.Name,
+					"audience":     updated.Audience,
+					"mode":         normalizeAuthMode(updated.AuthMode),
+					"updated":      true,
+					"auth_changed": changedAuth,
+				})
+			}
+
+			fmt.Fprintf(os.Stdout, "%s Updated auth settings for profile %s\n", theme.ok("✓"), updated.Name)
+			if changedAuth {
+				fmt.Fprintf(os.Stdout, "%s Run `mog auth login --profile %s ...` to refresh tokens for changed auth settings.\n", theme.warn("!"), updated.Name)
+			}
+			return nil
+		case "cancel":
+			if outfmt.IsJSON(ctx) {
+				return outfmt.WriteJSON(os.Stdout, map[string]any{"updated": false, "cancelled": true})
+			}
+			fmt.Fprintln(os.Stdout, "No changes saved.")
+			return nil
+		default:
+			return usagef("unsupported update action %q", choice)
+		}
+	}
+}
+
+func resolveProfileForUpdate(store profileStore, requested string) (config.ProfileRecord, error) {
+	name := strings.TrimSpace(requested)
+	if name != "" {
+		record, ok, err := store.Get(name)
+		if err != nil {
+			return config.ProfileRecord{}, err
+		}
+		if !ok {
+			return config.ProfileRecord{}, usagef("profile %q not found", name)
+		}
+		return record, nil
+	}
+
+	record, err := store.Active()
+	if err == nil {
+		return record, nil
+	}
+	if errors.Is(err, profile.ErrNoActiveProfile) {
+		return config.ProfileRecord{}, usage("no active profile. Use `mog auth use <profile>` or pass --profile")
+	}
+
+	return config.ProfileRecord{}, err
+}
+
+func authUpdateOptions(record config.ProfileRecord) []input.SelectStringOption {
+	options := []input.SelectStringOption{
+		{Label: "Audience", Value: "audience"},
+		{Label: "Auth mode", Value: "mode"},
+		{Label: "Client ID", Value: "client-id"},
+		{Label: "Tenant ID/domain", Value: "tenant"},
+		{Label: "Authority override", Value: "authority"},
+	}
+
+	if normalizeAuthMode(record.AuthMode) == profile.AuthModeAppOnly {
+		options = append(options, input.SelectStringOption{Label: "Default app-only target user", Value: "app-only-user"})
+	} else {
+		options = append(options, input.SelectStringOption{Label: "Delegated workloads", Value: "workloads"})
+	}
+
+	options = append(options,
+		input.SelectStringOption{Label: "Save changes", Value: "save"},
+		input.SelectStringOption{Label: "Cancel", Value: "cancel"},
+	)
+	return options
+}
+
+func promptUpdateAuthMode(ctx context.Context, audience string, defaultMode string) (string, error) {
+	mode := normalizeAuthMode(defaultMode)
+	if mode == "" {
+		mode = profile.AuthModeDelegated
+	}
+
+	options := []input.SelectStringOption{
+		{Label: "delegated (user sign-in)", Value: profile.AuthModeDelegated},
+	}
+	if strings.EqualFold(strings.TrimSpace(audience), profile.AudienceEnterprise) {
+		options = append(options, input.SelectStringOption{
+			Label: "app-only (daemon/service)",
+			Value: profile.AuthModeAppOnly,
+		})
+	}
+
+	if mode == profile.AuthModeAppOnly && !strings.EqualFold(strings.TrimSpace(audience), profile.AudienceEnterprise) {
+		mode = profile.AuthModeDelegated
+	}
+
+	selected, err := input.SelectString(ctx, input.SelectStringConfig{
+		Title:       "Auth mode",
+		Description: "Choose how this profile authenticates.",
+		Default:     mode,
+		Options:     options,
+	})
+	if err != nil {
+		return "", wrapPromptInputErr("select auth mode", err)
+	}
+
+	return normalizeAuthMode(selected), nil
+}
+
+func renderAuthUpdateSummary(theme authWizardTheme, record config.ProfileRecord) string {
+	mode := normalizeAuthMode(record.AuthMode)
+	if mode == "" {
+		mode = profile.AuthModeDelegated
+	}
+
+	lines := []string{
+		theme.dim("Current auth settings"),
+		fmt.Sprintf("  Profile:   %s", displayOrDash(strings.TrimSpace(record.Name))),
+		fmt.Sprintf("  Account:   %s", displayOrDash(strings.TrimSpace(record.Username))),
+		fmt.Sprintf("  Audience:  %s", displayOrDash(strings.TrimSpace(record.Audience))),
+		fmt.Sprintf("  Mode:      %s", displayOrDash(mode)),
+		fmt.Sprintf("  Client ID: %s", displayOrDash(strings.TrimSpace(record.ClientID))),
+		fmt.Sprintf("  Tenant:    %s", displayOrDash(strings.TrimSpace(record.TenantID))),
+		fmt.Sprintf("  Authority: %s", displayOrDash(strings.TrimSpace(record.Authority))),
+	}
+
+	if mode == profile.AuthModeAppOnly {
+		lines = append(lines,
+			fmt.Sprintf("  App user:  %s", displayOrDash(strings.TrimSpace(record.AppOnlyUser))),
+		)
+	} else {
+		workloads := "-"
+		if len(record.DelegatedScopeWorkloads) > 0 {
+			workloads = strings.Join(record.DelegatedScopeWorkloads, ",")
+		}
+		lines = append(lines,
+			fmt.Sprintf("  Workloads: %s", workloads),
+		)
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+func removeGroupsWorkload(workloads []string) []string {
+	out := make([]string, 0, len(workloads))
+	for _, workload := range workloads {
+		trimmed := strings.ToLower(strings.TrimSpace(workload))
+		if trimmed == "" || trimmed == "groups" {
+			continue
+		}
+		out = append(out, trimmed)
+	}
+	return out
+}
+
+func validateUpdatedProfile(record config.ProfileRecord) error {
+	record.Name = strings.TrimSpace(record.Name)
+	record.ClientID = strings.TrimSpace(record.ClientID)
+	record.Audience = strings.ToLower(strings.TrimSpace(record.Audience))
+	record.AuthMode = normalizeAuthMode(record.AuthMode)
+	record.Authority = strings.TrimSpace(record.Authority)
+	record.TenantID = strings.TrimSpace(record.TenantID)
+
+	if record.Audience == profile.AudienceConsumer {
+		record.TenantID = ""
+		record.DelegatedScopeWorkloads = removeGroupsWorkload(record.DelegatedScopeWorkloads)
+	}
+
+	if record.AuthMode == profile.AuthModeAppOnly {
+		if record.Audience != profile.AudienceEnterprise {
+			return usage("app-only mode requires enterprise audience")
+		}
+		record.DelegatedScopeWorkloads = nil
+	}
+
+	if err := profile.ValidateRecord(record); err != nil {
+		return usage(err.Error())
+	}
+
+	return nil
+}
+
+func authSettingsChanged(before config.ProfileRecord, after config.ProfileRecord) bool {
+	return !strings.EqualFold(strings.TrimSpace(before.Audience), strings.TrimSpace(after.Audience)) ||
+		normalizeAuthMode(before.AuthMode) != normalizeAuthMode(after.AuthMode) ||
+		strings.TrimSpace(before.ClientID) != strings.TrimSpace(after.ClientID) ||
+		strings.TrimSpace(before.TenantID) != strings.TrimSpace(after.TenantID) ||
+		strings.TrimSpace(before.Authority) != strings.TrimSpace(after.Authority)
 }
 
 type AuthUseCmd struct {

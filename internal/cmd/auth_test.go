@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/jaredpalmer/mogcli/internal/auth"
+	"github.com/jaredpalmer/mogcli/internal/config"
 	"github.com/jaredpalmer/mogcli/internal/profile"
 )
 
@@ -55,6 +56,21 @@ func TestAuthLoginNonInteractiveRequiresFlags(t *testing.T) {
 func TestAuthAppWizardRejectsNoInput(t *testing.T) {
 	ctx := withRootFlags(context.Background(), &RootFlags{NoInput: true})
 	err := (&AuthAppWizardCmd{}).Run(ctx)
+	if err == nil {
+		t.Fatal("expected usage error")
+	}
+	var exitErr *ExitError
+	if !errors.As(err, &exitErr) || exitErr.Code != 2 {
+		t.Fatalf("expected usage ExitError code 2, got %v", err)
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "interactive input") {
+		t.Fatalf("expected interactive input guidance, got %v", err)
+	}
+}
+
+func TestAuthUpdateRejectsNoInput(t *testing.T) {
+	ctx := withRootFlags(context.Background(), &RootFlags{NoInput: true})
+	err := (&AuthUpdateCmd{}).Run(ctx)
 	if err == nil {
 		t.Fatal("expected usage error")
 	}
@@ -285,4 +301,65 @@ func TestAuthLoginValidatesAudience(t *testing.T) {
 	if !strings.Contains(err.Error(), "--audience") {
 		t.Fatalf("expected audience error, got %v", err)
 	}
+}
+
+func TestAuthUpdateOptionsByMode(t *testing.T) {
+	t.Parallel()
+
+	delegated := authUpdateOptions(config.ProfileRecord{AuthMode: profile.AuthModeDelegated})
+	delegatedValues := make([]string, 0, len(delegated))
+	for _, option := range delegated {
+		delegatedValues = append(delegatedValues, option.Value)
+	}
+	if !containsString(delegatedValues, "workloads") {
+		t.Fatalf("delegated update options must include workloads: %#v", delegatedValues)
+	}
+	if containsString(delegatedValues, "app-only-user") {
+		t.Fatalf("delegated update options must not include app-only-user: %#v", delegatedValues)
+	}
+
+	appOnly := authUpdateOptions(config.ProfileRecord{AuthMode: profile.AuthModeAppOnly})
+	appOnlyValues := make([]string, 0, len(appOnly))
+	for _, option := range appOnly {
+		appOnlyValues = append(appOnlyValues, option.Value)
+	}
+	if !containsString(appOnlyValues, "app-only-user") {
+		t.Fatalf("app-only update options must include app-only-user: %#v", appOnlyValues)
+	}
+	if containsString(appOnlyValues, "workloads") {
+		t.Fatalf("app-only update options must not include workloads: %#v", appOnlyValues)
+	}
+}
+
+func TestValidateUpdatedProfileEnforcesAudienceModeCompatibility(t *testing.T) {
+	t.Parallel()
+
+	err := validateUpdatedProfile(config.ProfileRecord{
+		Name:     "personal",
+		Audience: profile.AudienceConsumer,
+		ClientID: "client-id",
+		AuthMode: profile.AuthModeAppOnly,
+	})
+	if err == nil {
+		t.Fatal("expected consumer app-only validation error")
+	}
+}
+
+func TestRemoveGroupsWorkload(t *testing.T) {
+	t.Parallel()
+
+	got := removeGroupsWorkload([]string{"mail", "groups", "calendar"})
+	want := []string{"mail", "calendar"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("unexpected workloads: got %#v want %#v", got, want)
+	}
+}
+
+func containsString(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
 }

@@ -180,6 +180,11 @@ func helpExamplesFor(selectedPath string) []string {
 			"$ mog auth login",
 			"$ mog auth login --profile work --audience enterprise --client-id <id> --scope-workloads mail,calendar",
 		}
+	case "auth update":
+		return []string{
+			"$ mog auth update",
+			"$ mog auth update --profile work",
+		}
 	case "auth app":
 		return []string{
 			"$ mog auth app",
