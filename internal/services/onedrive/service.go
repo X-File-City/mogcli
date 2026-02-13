@@ -55,6 +55,12 @@ func (s *Service) Get(ctx context.Context, remotePath string) ([]byte, error) {
 	return body, nil
 }
 
+func (s *Service) Stat(ctx context.Context, remotePath string) (map[string]any, error) {
+	var payload map[string]any
+	err := s.client.DoJSON(ctx, http.MethodGet, s.driveEndpoint()+"/root:"+normalizeRemotePath(remotePath), nil, nil, getOneDriveScopes, &payload)
+	return payload, err
+}
+
 func (s *Service) Put(ctx context.Context, remotePath string, content []byte) error {
 	endpoint := s.driveEndpoint() + "/root:" + normalizeRemotePath(remotePath) + ":/content"
 	_, _, err := s.client.Do(ctx, http.MethodPut, endpoint, nil, content, putOneDriveScopes, nil)

@@ -2,7 +2,6 @@ package tasks
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -32,7 +31,7 @@ func (s *Service) Lists(ctx context.Context) ([]map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	items, _, err := decodeValuePage(body)
+	items, _, err := graph.DecodeODataPage(body)
 	return items, err
 }
 
@@ -53,7 +52,7 @@ func (s *Service) ListTasks(ctx context.Context, listID string, max int, page st
 		return nil, "", err
 	}
 
-	items, next, err := decodeValuePage(body)
+	items, next, err := graph.DecodeODataPage(body)
 	if err != nil {
 		return nil, "", err
 	}
@@ -86,25 +85,6 @@ func (s *Service) DeleteTask(ctx context.Context, listID string, taskID string) 
 	path := "/me/todo/lists/" + url.PathEscape(strings.TrimSpace(listID)) + "/tasks/" + url.PathEscape(strings.TrimSpace(taskID))
 	_, _, err := s.client.Do(ctx, http.MethodDelete, path, nil, nil, deleteTaskScopes, nil)
 	return normalizeTaskMutationError(err)
-}
-
-func decodeValuePage(body []byte) ([]map[string]any, string, error) {
-	var payload map[string]any
-	if err := json.Unmarshal(body, &payload); err != nil {
-		return nil, "", fmt.Errorf("decode json response: %w", err)
-	}
-
-	items := make([]map[string]any, 0)
-	if values, ok := payload["value"].([]any); ok {
-		for _, value := range values {
-			if item, ok := value.(map[string]any); ok {
-				items = append(items, item)
-			}
-		}
-	}
-
-	next, _ := payload["@odata.nextLink"].(string)
-	return items, strings.TrimSpace(next), nil
 }
 
 func normalizeTaskMutationError(err error) error {

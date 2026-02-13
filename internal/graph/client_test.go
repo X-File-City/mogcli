@@ -1,6 +1,9 @@
 package graph
 
 import (
+	"context"
+	"errors"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -39,5 +42,36 @@ func TestResolveURLRejectsCrossHostAbsoluteURL(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "cross-host URL is not allowed") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestDoShortCircuitsWhenCircuitBreakerOpen(t *testing.T) {
+	cb := NewCircuitBreaker()
+	for i := 0; i < CircuitBreakerThreshold; i++ {
+		cb.RecordFailure()
+	}
+
+	tokenCalls := 0
+	c := &Client{
+		BaseURL: "https://graph.microsoft.com/v1.0",
+		TokenProvider: func(context.Context, []string) (string, error) {
+			tokenCalls++
+			return "token", nil
+		},
+		HTTPClient: http.DefaultClient,
+		Breaker:    cb,
+	}
+
+	_, _, err := c.Do(context.Background(), http.MethodGet, "/me", nil, nil, nil, nil)
+	if err == nil {
+		t.Fatal("expected circuit breaker open error")
+	}
+
+	var breakerErr *CircuitBreakerError
+	if !errors.As(err, &breakerErr) {
+		t.Fatalf("expected CircuitBreakerError, got %T (%v)", err, err)
+	}
+	if tokenCalls != 0 {
+		t.Fatalf("expected token provider not to be called, got %d calls", tokenCalls)
 	}
 }

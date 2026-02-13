@@ -17,6 +17,7 @@ import (
 
 type TokenProvider func(ctx context.Context, scopes []string) (string, error)
 
+// Client wraps Microsoft Graph HTTP behavior including auth, retry, and paging.
 type Client struct {
 	BaseURL       string
 	HTTPClient    *http.Client
@@ -27,6 +28,7 @@ type Client struct {
 	Breaker       *CircuitBreaker
 }
 
+// NewClient builds a Graph client with conservative retry and breaker defaults.
 func NewClient(tokenProvider TokenProvider) *Client {
 	return &Client{
 		BaseURL:       "https://graph.microsoft.com/v1.0",
@@ -80,61 +82,77 @@ func (c *Client) Do(ctx context.Context, method string, path string, query url.V
 		return nil, nil, errors.New("missing token provider")
 	}
 
-	if c.Breaker != nil && c.Breaker.IsOpen() {
-		return nil, nil, &CircuitBreakerError{}
+	if c.Breaker == nil {
+		resp, payload, _, err := c.doWithRetry(ctx, method, path, query, body, scopes, headers)
+		return resp, payload, err
 	}
 
+	var resp *http.Response
+	var payload []byte
+	err := c.Breaker.Execute(func() (bool, error) {
+		var recordFailure bool
+		var callErr error
+		resp, payload, recordFailure, callErr = c.doWithRetry(ctx, method, path, query, body, scopes, headers)
+		return recordFailure, callErr
+	})
+	if err != nil {
+		return resp, payload, err
+	}
+
+	return resp, payload, nil
+}
+
+func (c *Client) doWithRetry(
+	ctx context.Context,
+	method string,
+	path string,
+	query url.Values,
+	body any,
+	scopes []string,
+	headers http.Header,
+) (*http.Response, []byte, bool, error) {
 	retries429 := 0
 	retries5xx := 0
 
 	for {
 		resp, b, err := c.doOnce(ctx, method, path, query, body, scopes, headers)
 		if err != nil {
-			if c.Breaker != nil {
-				c.Breaker.RecordFailure()
-			}
-			return nil, nil, err
+			return nil, nil, true, err
 		}
 
 		if resp.StatusCode < 400 {
-			if c.Breaker != nil {
-				c.Breaker.RecordSuccess()
-			}
-			return resp, b, nil
+			return resp, b, false, nil
 		}
 
 		if resp.StatusCode == http.StatusTooManyRequests {
 			if retries429 >= c.MaxRetries429 {
 				apiErr := parseAPIError(resp.StatusCode, b)
-				return resp, b, apiErr
+				return resp, b, false, apiErr
 			}
 
 			delay := retryDelay(resp.Header.Get("Retry-After"), retries429, c.BaseDelay)
 			if err := sleepContext(ctx, delay); err != nil {
-				return nil, nil, err
+				return nil, nil, false, err
 			}
 			retries429++
 			continue
 		}
 
 		if resp.StatusCode >= 500 {
-			if c.Breaker != nil {
-				c.Breaker.RecordFailure()
-			}
 			if retries5xx >= c.MaxRetries5xx {
 				apiErr := parseAPIError(resp.StatusCode, b)
-				return resp, b, apiErr
+				return resp, b, true, apiErr
 			}
 
 			if err := sleepContext(ctx, ServerErrorRetryDelay); err != nil {
-				return nil, nil, err
+				return nil, nil, false, err
 			}
 			retries5xx++
 			continue
 		}
 
 		apiErr := parseAPIError(resp.StatusCode, b)
-		return resp, b, apiErr
+		return resp, b, false, apiErr
 	}
 }
 

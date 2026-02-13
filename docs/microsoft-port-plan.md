@@ -18,6 +18,8 @@ Implemented in codebase:
 8. App-only endpoint routing for mail/contacts/onedrive using `/users/{id}` with `--user` override and profile fallback.
 9. Explicit fail-fast app-only rejection for calendar/tasks with deterministic user-facing guidance.
 10. Task mutation mutability error normalization in `internal/services/tasks/service.go` for built-in/well-known Microsoft To Do list constraints.
+11. `--dry-run` previews for write operations in mail, calendar, and onedrive command surfaces.
+12. OneDrive local path hardening (`SafeExpandPath`), metadata-rich delete confirmation, and progress output for local file transfers.
 
 ## 0. Critique of the prior plan
 

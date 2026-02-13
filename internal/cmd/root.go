@@ -55,6 +55,9 @@ func Execute(args []string) (err error) {
 		args = []string{"--help"}
 	}
 
+	// Kong exits by invoking the configured kong.Exit callback.
+	// We translate that callback into a panic carrying only an exit code,
+	// then recover here so Execute can return a regular Go error value.
 	defer func() {
 		if r := recover(); r != nil {
 			if ep, ok := r.(exitPanic); ok {

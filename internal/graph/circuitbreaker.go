@@ -41,12 +41,47 @@ func (cb *CircuitBreaker) RecordFailure() {
 func (cb *CircuitBreaker) IsOpen() bool {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
+	return cb.isOpenLocked(time.Now())
+}
 
+// Execute atomically checks whether the breaker is open, runs fn, and then
+// records success/failure state.
+//
+// fn returns (recordFailure, err):
+//   - err == nil: records success and resets failures.
+//   - err != nil, recordFailure == true: records a breaker failure.
+//   - err != nil, recordFailure == false: returns err without changing breaker state.
+func (cb *CircuitBreaker) Execute(fn func() (bool, error)) error {
+	if fn == nil {
+		return nil
+	}
+
+	cb.mu.Lock()
+	if cb.isOpenLocked(time.Now()) {
+		cb.mu.Unlock()
+		return &CircuitBreakerError{}
+	}
+	cb.mu.Unlock()
+
+	recordFailure, err := fn()
+	if err == nil {
+		cb.RecordSuccess()
+		return nil
+	}
+	if !recordFailure {
+		return err
+	}
+
+	cb.RecordFailure()
+	return err
+}
+
+func (cb *CircuitBreaker) isOpenLocked(now time.Time) bool {
 	if !cb.open {
 		return false
 	}
 
-	if time.Since(cb.lastFailure) > CircuitBreakerResetTime {
+	if now.Sub(cb.lastFailure) > CircuitBreakerResetTime {
 		cb.open = false
 		cb.failures = 0
 		return false

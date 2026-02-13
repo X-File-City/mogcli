@@ -7,6 +7,7 @@ import (
 
 func TestNormalizePageToken(t *testing.T) {
 	valid := "https://graph.microsoft.com/v1.0/me/messages?$skiptoken=abc"
+	validGov := "https://graph.microsoft.us/v1.0/me/messages?$skiptoken=abc"
 
 	tests := []struct {
 		name    string
@@ -17,8 +18,10 @@ func TestNormalizePageToken(t *testing.T) {
 		{name: "empty", input: "", want: ""},
 		{name: "trim empty", input: "   ", want: ""},
 		{name: "absolute url", input: valid, want: valid},
+		{name: "absolute gov url", input: validGov, want: validGov},
 		{name: "relative url", input: "/me/messages?$skiptoken=abc", wantErr: true},
 		{name: "unsupported scheme", input: "ftp://graph.microsoft.com/v1.0/me/messages", wantErr: true},
+		{name: "untrusted host", input: "https://evil.example/v1.0/me/messages?$skiptoken=abc", wantErr: true},
 	}
 
 	for _, tc := range tests {

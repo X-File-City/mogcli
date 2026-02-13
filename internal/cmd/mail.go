@@ -86,6 +86,7 @@ type MailSendCmd struct {
 	Subject string   `name:"subject" required:"" help:"Email subject"`
 	Body    string   `name:"body" required:"" help:"Plain text body"`
 	User    string   `name:"user" help:"App-only target user override (UPN or user ID)"`
+	DryRun  bool     `name:"dry-run" help:"Preview send without sending the message"`
 }
 
 func (c *MailSendCmd) Run(ctx context.Context) error {
@@ -101,6 +102,19 @@ func (c *MailSendCmd) Run(ctx context.Context) error {
 	recipients := splitCSV(c.To)
 	if len(recipients) == 0 {
 		return usage("at least one --to recipient is required")
+	}
+	if c.DryRun {
+		if outfmt.IsJSON(ctx) {
+			return outfmt.WriteJSON(os.Stdout, map[string]any{
+				"dry_run":  true,
+				"action":   "mail.send",
+				"to":       recipients,
+				"subject":  c.Subject,
+				"body_len": len(c.Body),
+			})
+		}
+		fmt.Fprintf(os.Stdout, "Dry run: would send message to %s with subject %q\n", strings.Join(recipients, ", "), c.Subject)
+		return nil
 	}
 
 	svc := mail.New(rt.Graph, targetUser)

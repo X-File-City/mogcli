@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"unicode"
 
 	"github.com/jaredpalmer/mogcli/internal/config"
 )
@@ -26,14 +27,23 @@ const (
 	AuthModeAppOnly   = "app_only"
 )
 
+// Store manages profile records persisted in local config.
 type Store struct{}
 
+// NewStore creates a profile store backed by local config.
 func NewStore() *Store { return &Store{} }
 
 func NormalizeName(name string) (string, error) {
 	normalized := strings.TrimSpace(name)
 	if normalized == "" {
 		return "", ErrInvalidName
+	}
+
+	for _, r := range normalized {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '-' || r == '_' {
+			continue
+		}
+		return "", fmt.Errorf("%w: invalid character %q", ErrInvalidName, r)
 	}
 
 	return normalized, nil

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 type ProfileRecord struct {
@@ -31,6 +32,11 @@ type File struct {
 	ActiveProfile   string                   `json:"active_profile,omitempty"`
 }
 
+var (
+	configLockRetryInterval = 10 * time.Millisecond
+	configLockTimeout       = 5 * time.Second
+)
+
 func ConfigPath() (string, error) {
 	dir, err := Dir()
 	if err != nil {
@@ -41,33 +47,30 @@ func ConfigPath() (string, error) {
 }
 
 func WriteConfig(cfg File) error {
-	_, err := EnsureDir()
-	if err != nil {
-		return fmt.Errorf("ensure config dir: %w", err)
-	}
+	return withConfigLock(func() error {
+		path, err := ConfigPath()
+		if err != nil {
+			return err
+		}
 
-	path, err := ConfigPath()
-	if err != nil {
-		return err
-	}
+		b, err := json.MarshalIndent(cfg, "", "  ")
+		if err != nil {
+			return fmt.Errorf("encode config json: %w", err)
+		}
 
-	b, err := json.MarshalIndent(cfg, "", "  ")
-	if err != nil {
-		return fmt.Errorf("encode config json: %w", err)
-	}
+		b = append(b, '\n')
+		tmp := path + ".tmp"
 
-	b = append(b, '\n')
-	tmp := path + ".tmp"
+		if err := os.WriteFile(tmp, b, 0o600); err != nil {
+			return fmt.Errorf("write config: %w", err)
+		}
 
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
-		return fmt.Errorf("write config: %w", err)
-	}
+		if err := os.Rename(tmp, path); err != nil {
+			return fmt.Errorf("commit config: %w", err)
+		}
 
-	if err := os.Rename(tmp, path); err != nil {
-		return fmt.Errorf("commit config: %w", err)
-	}
-
-	return nil
+		return nil
+	})
 }
 
 func ConfigExists() (bool, error) {
@@ -88,23 +91,31 @@ func ConfigExists() (bool, error) {
 }
 
 func ReadConfig() (File, error) {
-	path, err := ConfigPath()
-	if err != nil {
-		return File{}, err
-	}
-
-	b, err := os.ReadFile(path) //nolint:gosec // config file path
-	if err != nil {
-		if os.IsNotExist(err) {
-			return File{}, nil
+	var cfg File
+	err := withConfigLock(func() error {
+		path, pathErr := ConfigPath()
+		if pathErr != nil {
+			return pathErr
 		}
 
-		return File{}, fmt.Errorf("read config: %w", err)
-	}
+		b, readErr := os.ReadFile(path) //nolint:gosec // config file path
+		if readErr != nil {
+			if os.IsNotExist(readErr) {
+				cfg = File{}
+				return nil
+			}
 
-	var cfg File
-	if err := json.Unmarshal(b, &cfg); err != nil {
-		return File{}, fmt.Errorf("parse config %s: %w", path, err)
+			return fmt.Errorf("read config: %w", readErr)
+		}
+
+		if unmarshalErr := json.Unmarshal(b, &cfg); unmarshalErr != nil {
+			return fmt.Errorf("parse config %s: %w", path, unmarshalErr)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return File{}, err
 	}
 
 	if cfg.Profiles == nil {
@@ -112,4 +123,37 @@ func ReadConfig() (File, error) {
 	}
 
 	return cfg, nil
+}
+
+func withConfigLock(fn func() error) error {
+	if fn == nil {
+		return nil
+	}
+
+	dir, err := EnsureDir()
+	if err != nil {
+		return fmt.Errorf("ensure config dir: %w", err)
+	}
+	lockPath := filepath.Join(dir, "config.lock")
+	deadline := time.Now().Add(configLockTimeout)
+
+	for {
+		lockFile, openErr := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+		if openErr == nil {
+			defer func() {
+				_ = lockFile.Close()
+				_ = os.Remove(lockPath)
+			}()
+			return fn()
+		}
+
+		if !os.IsExist(openErr) {
+			return fmt.Errorf("acquire config lock: %w", openErr)
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("acquire config lock timeout: %s", lockPath)
+		}
+
+		time.Sleep(configLockRetryInterval)
+	}
 }

@@ -12,6 +12,7 @@ Microsoft 365 in your terminal.
 - Stable scripting output modes: `--json` and `--plain`.
 - Interactive delegated wizard (`mog auth`), advanced app-only wizard (`mog auth app`), settings editor (`mog auth update`), and non-interactive login (`mog auth login`).
 - Per-command scope requests in delegated mode (progressive consent).
+- `--dry-run` previews for write operations in Mail, Calendar, and OneDrive.
 
 ### Workload support matrix
 
@@ -174,6 +175,7 @@ Mail:
 mog mail list --max 50 --query "from:alerts@example.com"
 mog mail get <message-id>
 mog mail send --to dev@contoso.com --subject "Deploy complete" --body "Finished."
+mog mail send --to dev@contoso.com --subject "Deploy complete" --body "Finished." --dry-run
 ```
 
 Calendar:
@@ -185,6 +187,7 @@ mog calendar create \
   --start "2026-02-13T16:00:00-08:00" \
   --end "2026-02-13T16:30:00-08:00" \
   --body "Weekly sync"
+mog calendar delete <event-id> --dry-run
 ```
 
 Contacts:
@@ -218,7 +221,10 @@ mog onedrive put ./report.pdf --path /Reports/report.pdf
 mog onedrive get /Reports/report.pdf --out ./report.pdf
 mog onedrive mkdir --path /Reports/Archive
 mog onedrive rm --path /Reports/old-report.pdf
+mog onedrive rm --path /Reports/old-report.pdf --dry-run
 ```
+
+If `mog onedrive get` is run without `--out`, files are saved under the local `onedrive-downloads` directory in your mogcli config path.
 
 App-only target user override (mail/contacts/onedrive):
 

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/jaredpalmer/mogcli/internal/errfmt"
+	"github.com/jaredpalmer/mogcli/internal/profile"
 	"github.com/jaredpalmer/mogcli/internal/secrets"
 )
 
@@ -24,11 +25,13 @@ var (
 	ErrMissingSecret       = errors.New("missing client secret")
 )
 
+// Manager coordinates login, token acquisition, and secure token persistence.
 type Manager struct {
 	HTTPClient *http.Client
 	now        func() time.Time
 }
 
+// NewManager returns an auth manager with default HTTP/time providers.
 func NewManager() *Manager {
 	return &Manager{
 		HTTPClient: http.DefaultClient,
@@ -52,12 +55,20 @@ func (m *Manager) nowUTC() time.Time {
 	return time.Now().UTC()
 }
 
-func tokenCacheKey(profileName string) string {
-	return "mog:cache:" + strings.TrimSpace(profileName)
+func tokenCacheKey(profileName string) (string, error) {
+	normalized, err := profile.NormalizeName(profileName)
+	if err != nil {
+		return "", fmt.Errorf("invalid profile name: %w", err)
+	}
+	return "mog:cache:" + normalized, nil
 }
 
-func appSecretKey(profileName string) string {
-	return "mog:appsecret:" + strings.TrimSpace(profileName)
+func appSecretKey(profileName string) (string, error) {
+	normalized, err := profile.NormalizeName(profileName)
+	if err != nil {
+		return "", fmt.Errorf("invalid profile name: %w", err)
+	}
+	return "mog:appsecret:" + normalized, nil
 }
 
 func graphDefaultScope() string {
@@ -126,6 +137,7 @@ func (m *Manager) LoginDelegated(ctx context.Context, input DelegatedLoginInput,
 	if err != nil {
 		return AccountInfo{}, err
 	}
+	defer secureZero(body)
 
 	var dcr deviceCodeResponse
 	if err := json.Unmarshal(body, &dcr); err != nil {
@@ -230,11 +242,18 @@ func (m *Manager) LoginAppOnly(ctx context.Context, input AppOnlyLoginInput) err
 		return ErrMissingSecret
 	}
 
-	if err := secrets.SetSecret(appSecretKey(input.ProfileName), []byte(input.Secret)); err != nil {
+	secretKey, err := appSecretKey(input.ProfileName)
+	if err != nil {
+		return err
+	}
+
+	secretBytes := []byte(input.Secret)
+	defer secureZero(secretBytes)
+	if err := secrets.SetSecret(secretKey, secretBytes); err != nil {
 		return fmt.Errorf("store client secret: %w", err)
 	}
 
-	_, err := m.AcquireAppOnlyToken(ctx, input.ProfileName, input.ClientID, input.Authority)
+	_, err = m.AcquireAppOnlyToken(ctx, input.ProfileName, input.ClientID, input.Authority)
 	return err
 }
 
@@ -281,6 +300,7 @@ func (m *Manager) AcquireDelegatedToken(
 	if err != nil {
 		return "", err
 	}
+	defer secureZero(body)
 	if status != http.StatusOK {
 		var oe oauthErrorResponse
 		_ = json.Unmarshal(body, &oe)
@@ -321,10 +341,16 @@ func (m *Manager) AcquireDelegatedToken(
 }
 
 func (m *Manager) AcquireAppOnlyToken(ctx context.Context, profileName string, clientID string, authority string) (string, error) {
-	secret, err := secrets.GetSecret(appSecretKey(profileName))
+	secretKey, err := appSecretKey(profileName)
+	if err != nil {
+		return "", err
+	}
+
+	secret, err := secrets.GetSecret(secretKey)
 	if err != nil {
 		return "", fmt.Errorf("read client secret: %w", err)
 	}
+	defer secureZero(secret)
 	if len(secret) == 0 {
 		return "", ErrMissingSecret
 	}
@@ -339,6 +365,7 @@ func (m *Manager) AcquireAppOnlyToken(ctx context.Context, profileName string, c
 	if err != nil {
 		return "", err
 	}
+	defer secureZero(body)
 
 	if status != http.StatusOK {
 		var oe oauthErrorResponse
@@ -369,10 +396,19 @@ func (m *Manager) ReadAccount(profileName string) (AccountInfo, error) {
 }
 
 func (m *Manager) Logout(profileName string) error {
-	if err := secrets.DeleteSecret(tokenCacheKey(profileName)); err != nil {
+	cacheKey, err := tokenCacheKey(profileName)
+	if err != nil {
 		return err
 	}
-	if err := secrets.DeleteSecret(appSecretKey(profileName)); err != nil {
+	if err := secrets.DeleteSecret(cacheKey); err != nil {
+		return err
+	}
+
+	secretKey, err := appSecretKey(profileName)
+	if err != nil {
+		return err
+	}
+	if err := secrets.DeleteSecret(secretKey); err != nil {
 		return err
 	}
 
@@ -506,7 +542,11 @@ func looksLikeTenantDomain(value string) bool {
 }
 
 func (m *Manager) purgeDelegatedTokenCache(profileName string) error {
-	if err := secrets.DeleteSecret(tokenCacheKey(profileName)); err != nil {
+	cacheKey, err := tokenCacheKey(profileName)
+	if err != nil {
+		return err
+	}
+	if err := secrets.DeleteSecret(cacheKey); err != nil {
 		return fmt.Errorf("purge delegated token cache: %w", err)
 	}
 	return nil
@@ -517,8 +557,14 @@ func (m *Manager) saveToken(profileName string, cache TokenCache) error {
 	if err != nil {
 		return fmt.Errorf("encode token cache: %w", err)
 	}
+	defer secureZero(payload)
 
-	if err := secrets.SetSecret(tokenCacheKey(profileName), payload); err != nil {
+	cacheKey, err := tokenCacheKey(profileName)
+	if err != nil {
+		return err
+	}
+
+	if err := secrets.SetSecret(cacheKey, payload); err != nil {
 		return fmt.Errorf("store token cache: %w", err)
 	}
 
@@ -526,10 +572,16 @@ func (m *Manager) saveToken(profileName string, cache TokenCache) error {
 }
 
 func (m *Manager) loadToken(profileName string) (TokenCache, error) {
-	payload, err := secrets.GetSecret(tokenCacheKey(profileName))
+	cacheKey, err := tokenCacheKey(profileName)
+	if err != nil {
+		return TokenCache{}, err
+	}
+
+	payload, err := secrets.GetSecret(cacheKey)
 	if err != nil {
 		return TokenCache{}, fmt.Errorf("read token cache: %w", err)
 	}
+	defer secureZero(payload)
 
 	var cache TokenCache
 	if err := json.Unmarshal(payload, &cache); err != nil {
@@ -623,5 +675,11 @@ func sleepContext(ctx context.Context, delay time.Duration) error {
 		return ctx.Err()
 	case <-t.C:
 		return nil
+	}
+}
+
+func secureZero(value []byte) {
+	for i := range value {
+		value[i] = 0
 	}
 }

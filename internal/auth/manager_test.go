@@ -280,3 +280,20 @@ func idTokenFor(t *testing.T, accountID string, tenantID string) string {
 	payload := base64.RawURLEncoding.EncodeToString(payloadBytes)
 	return header + "." + payload + "."
 }
+
+func TestTokenCacheKeyRejectsInvalidProfileName(t *testing.T) {
+	if _, err := tokenCacheKey("../bad-profile"); err == nil {
+		t.Fatal("expected invalid profile name error")
+	}
+}
+
+func TestSecureZero(t *testing.T) {
+	value := []byte("super-secret")
+	secureZero(value)
+
+	for i, b := range value {
+		if b != 0 {
+			t.Fatalf("expected index %d to be zeroed, got %d", i, b)
+		}
+	}
+}

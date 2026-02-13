@@ -2,7 +2,6 @@ package mail
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -51,7 +50,7 @@ func (s *Service) List(ctx context.Context, max int, queryText string, page stri
 		return nil, "", err
 	}
 
-	items, next, err := decodeValuePage(body)
+	items, next, err := graph.DecodeODataPage(body)
 	if err != nil {
 		return nil, "", err
 	}
@@ -106,32 +105,6 @@ func (s *Service) sendMailEndpoint() string {
 		return "/users/" + url.PathEscape(s.appOnlyUser) + "/sendMail"
 	}
 	return "/me/sendMail"
-}
-
-func decodeValuePage(body []byte) ([]map[string]any, string, error) {
-	var payload map[string]any
-	if err := jsonUnmarshal(body, &payload); err != nil {
-		return nil, "", err
-	}
-
-	items := make([]map[string]any, 0)
-	if values, ok := payload["value"].([]any); ok {
-		for _, value := range values {
-			if item, ok := value.(map[string]any); ok {
-				items = append(items, item)
-			}
-		}
-	}
-
-	next, _ := payload["@odata.nextLink"].(string)
-	return items, strings.TrimSpace(next), nil
-}
-
-func jsonUnmarshal(data []byte, v any) error {
-	if err := json.Unmarshal(data, v); err != nil {
-		return fmt.Errorf("decode json response: %w", err)
-	}
-	return nil
 }
 
 func trimPage(items []map[string]any, next string, max int) ([]map[string]any, string) {

@@ -81,6 +81,7 @@ type CalendarCreateCmd struct {
 	Body      string   `name:"body" help:"Optional body text"`
 	Attendees []string `name:"attendee" help:"Attendee email (repeat for multiple)"`
 	Teams     bool     `name:"teams" help:"Add Teams meeting link"`
+	DryRun    bool     `name:"dry-run" help:"Preview create without creating the event"`
 }
 
 func (c *CalendarCreateCmd) Run(ctx context.Context) error {
@@ -121,6 +122,17 @@ func (c *CalendarCreateCmd) Run(ctx context.Context) error {
 		payload["isOnlineMeeting"] = true
 		payload["onlineMeetingProvider"] = "teamsForBusiness"
 	}
+	if c.DryRun {
+		if outfmt.IsJSON(ctx) {
+			return outfmt.WriteJSON(os.Stdout, map[string]any{
+				"dry_run": true,
+				"action":  "calendar.create",
+				"event":   payload,
+			})
+		}
+		fmt.Fprintf(os.Stdout, "Dry run: would create event %q from %s to %s\n", c.Subject, c.Start, c.End)
+		return nil
+	}
 
 	svc := calendar.New(rt.Graph)
 	item, err := svc.Create(ctx, payload)
@@ -143,6 +155,7 @@ type CalendarUpdateCmd struct {
 	Body      string   `name:"body" help:"Body text"`
 	Attendees []string `name:"attendee" help:"Attendee email (repeat for multiple)"`
 	Teams     bool     `name:"teams" help:"Add Teams meeting link"`
+	DryRun    bool     `name:"dry-run" help:"Preview update without modifying the event"`
 }
 
 func (c *CalendarUpdateCmd) Run(ctx context.Context) error {
@@ -191,6 +204,18 @@ func (c *CalendarUpdateCmd) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	if c.DryRun {
+		if outfmt.IsJSON(ctx) {
+			return outfmt.WriteJSON(os.Stdout, map[string]any{
+				"dry_run": true,
+				"action":  "calendar.update",
+				"id":      c.ID,
+				"changes": payload,
+			})
+		}
+		fmt.Fprintf(os.Stdout, "Dry run: would update event %s\n", c.ID)
+		return nil
+	}
 
 	svc := calendar.New(rt.Graph)
 	if err := svc.Update(ctx, c.ID, payload); err != nil {
@@ -205,10 +230,27 @@ func (c *CalendarUpdateCmd) Run(ctx context.Context) error {
 }
 
 type CalendarDeleteCmd struct {
-	ID string `arg:"" required:"" help:"Event ID"`
+	ID     string `arg:"" required:"" help:"Event ID"`
+	DryRun bool   `name:"dry-run" help:"Preview delete without deleting the event"`
 }
 
 func (c *CalendarDeleteCmd) Run(ctx context.Context) error {
+	rt, err := resolveRuntime(ctx, capCalendarDelete)
+	if err != nil {
+		return err
+	}
+	if c.DryRun {
+		if outfmt.IsJSON(ctx) {
+			return outfmt.WriteJSON(os.Stdout, map[string]any{
+				"dry_run": true,
+				"action":  "calendar.delete",
+				"id":      c.ID,
+			})
+		}
+		fmt.Fprintf(os.Stdout, "Dry run: would delete event %s\n", c.ID)
+		return nil
+	}
+
 	flags := rootFlagsFromContext(ctx)
 	if flags == nil {
 		flags = &RootFlags{}
@@ -217,10 +259,6 @@ func (c *CalendarDeleteCmd) Run(ctx context.Context) error {
 		return err
 	}
 
-	rt, err := resolveRuntime(ctx, capCalendarDelete)
-	if err != nil {
-		return err
-	}
 	if err := calendar.New(rt.Graph).Delete(ctx, c.ID); err != nil {
 		return err
 	}

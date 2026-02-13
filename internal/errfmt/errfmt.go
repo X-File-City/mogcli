@@ -10,6 +10,7 @@ import (
 	"github.com/alecthomas/kong"
 
 	"github.com/jaredpalmer/mogcli/internal/graph"
+	"github.com/jaredpalmer/mogcli/internal/profile"
 )
 
 var aadstsRe = regexp.MustCompile(`AADSTS\d+`)
@@ -26,6 +27,19 @@ func Format(err error) string {
 
 	if errors.Is(err, os.ErrNotExist) {
 		return prefixError(err.Error())
+	}
+
+	var breakerErr *graph.CircuitBreakerError
+	if errors.As(err, &breakerErr) {
+		return prefixError("Graph requests are temporarily paused after repeated failures. Retry in a few seconds")
+	}
+
+	if errors.Is(err, profile.ErrProfileNotFound) {
+		return prefixError("Profile not found. Run `mog auth accounts` to list available profiles")
+	}
+
+	if errors.Is(err, profile.ErrNoActiveProfile) {
+		return prefixError("No active profile. Run `mog auth use <profile>` or `mog auth login ...`")
 	}
 
 	var apiErr *graph.APIError

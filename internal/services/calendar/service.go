@@ -2,7 +2,6 @@ package calendar
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -48,7 +47,7 @@ func (s *Service) List(ctx context.Context, from string, to string, max int, pag
 		return nil, "", err
 	}
 
-	items, next, err := decodeValuePage(body)
+	items, next, err := graph.DecodeODataPage(body)
 	if err != nil {
 		return nil, "", err
 	}
@@ -77,25 +76,6 @@ func (s *Service) Update(ctx context.Context, id string, payload map[string]any)
 func (s *Service) Delete(ctx context.Context, id string) error {
 	_, _, err := s.client.Do(ctx, http.MethodDelete, "/me/events/"+url.PathEscape(strings.TrimSpace(id)), nil, nil, deleteCalendarScopes, nil)
 	return err
-}
-
-func decodeValuePage(body []byte) ([]map[string]any, string, error) {
-	var payload map[string]any
-	if err := json.Unmarshal(body, &payload); err != nil {
-		return nil, "", fmt.Errorf("decode json response: %w", err)
-	}
-
-	items := make([]map[string]any, 0)
-	if values, ok := payload["value"].([]any); ok {
-		for _, value := range values {
-			if item, ok := value.(map[string]any); ok {
-				items = append(items, item)
-			}
-		}
-	}
-
-	next, _ := payload["@odata.nextLink"].(string)
-	return items, strings.TrimSpace(next), nil
 }
 
 func trimPage(items []map[string]any, next string, max int) ([]map[string]any, string) {

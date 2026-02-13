@@ -80,6 +80,8 @@ func TestEndpointsRouteByAuthMode(t *testing.T) {
 					_, _ = fmt.Fprint(w, `{"value":[]}`)
 				case r.Method == http.MethodGet && r.URL.Path == tc.basePrefix+"/root:/docs/report.txt:/content":
 					_, _ = fmt.Fprint(w, `hello`)
+				case r.Method == http.MethodGet && r.URL.Path == tc.basePrefix+"/root:/docs/report.txt":
+					_, _ = fmt.Fprint(w, `{"id":"item-id","size":5}`)
 				case r.Method == http.MethodPut && r.URL.Path == tc.basePrefix+"/root:/docs/report.txt:/content":
 					w.WriteHeader(http.StatusCreated)
 				case r.Method == http.MethodPost && r.URL.Path == tc.basePrefix+"/root:/projects:/children":
@@ -102,6 +104,9 @@ func TestEndpointsRouteByAuthMode(t *testing.T) {
 			}
 			if _, err := svc.Get(context.Background(), "/docs/report.txt"); err != nil {
 				t.Fatalf("Get failed: %v", err)
+			}
+			if _, err := svc.Stat(context.Background(), "/docs/report.txt"); err != nil {
+				t.Fatalf("Stat failed: %v", err)
 			}
 			if err := svc.Put(context.Background(), "/docs/report.txt", []byte("hello")); err != nil {
 				t.Fatalf("Put failed: %v", err)
