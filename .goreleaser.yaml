@@ -52,3 +52,22 @@ archives:
 
 checksum:
   name_template: checksums.txt
+
+brews:
+  - name: mogcli
+    directory: Formula
+    homepage: "https://github.com/jaredpalmer/mogcli"
+    description: "Microsoft 365 in your terminal"
+    license: "MIT"
+    install: |
+      bin.install "mog"
+    test: |
+      system "#{bin}/mog", "--help"
+    repository:
+      owner: jaredpalmer
+      name: homebrew-tap
+      branch: main
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    commit_author:
+      name: github-actions[bot]
+      email: 41898282+github-actions[bot]@users.noreply.github.com

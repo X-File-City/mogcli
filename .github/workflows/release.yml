@@ -39,6 +39,16 @@ jobs:
           RELEASE_TAG: ${{ inputs.tag }}
         run: git checkout "$RELEASE_TAG"
 
+      - name: Validate Homebrew tap token
+        env:
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+        run: |
+          if [[ -z "${HOMEBREW_TAP_GITHUB_TOKEN:-}" ]]; then
+            echo "Missing required secret: HOMEBREW_TAP_GITHUB_TOKEN" >&2
+            echo "Set it in repository settings: Settings -> Secrets and variables -> Actions." >&2
+            exit 1
+          fi
+
       - name: GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
@@ -47,3 +57,4 @@ jobs:
           args: release --clean --config /tmp/.goreleaser.yaml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
