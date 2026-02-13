@@ -10,6 +10,7 @@ import (
 func TestSetGetDeleteSecret(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("MOG_KEYRING_BACKEND", "file")
 
 	key := "mog:test:key"

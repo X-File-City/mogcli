@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -11,6 +12,15 @@ import (
 	"github.com/jaredpalmer/mogcli/internal/config"
 	"github.com/jaredpalmer/mogcli/internal/profile"
 )
+
+func setTempUserConfigEnv(t *testing.T) string {
+	t.Helper()
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	return home
+}
 
 type fakeAuthManager struct {
 	delegatedAccount auth.AccountInfo
@@ -128,8 +138,7 @@ func TestAuthLoginDelegatedValidatesScopeWorkloads(t *testing.T) {
 }
 
 func TestAuthLoginDelegatedPersistsWorkloads(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTempUserConfigEnv(t)
 
 	fake := &fakeAuthManager{
 		delegatedAccount: auth.AccountInfo{
@@ -185,8 +194,7 @@ func TestAuthLoginDelegatedPersistsWorkloads(t *testing.T) {
 }
 
 func TestAuthLoginDelegatedStoresResolvedTenantID(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTempUserConfigEnv(t)
 
 	fake := &fakeAuthManager{
 		delegatedAccount: auth.AccountInfo{
@@ -225,8 +233,7 @@ func TestAuthLoginDelegatedStoresResolvedTenantID(t *testing.T) {
 }
 
 func TestAuthLoginAppOnlyPersistsDefaultUser(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTempUserConfigEnv(t)
 
 	fake := &fakeAuthManager{}
 	oldFactory := newAuthManager
@@ -266,8 +273,7 @@ func TestAuthLoginAppOnlyPersistsDefaultUser(t *testing.T) {
 }
 
 func TestAuthStatusEmptyState(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTempUserConfigEnv(t)
 
 	stdout, stderr, err := captureExecuteOutput(t, []string{"auth", "status"})
 	if err != nil {
