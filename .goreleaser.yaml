@@ -65,7 +65,7 @@ archives:
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     files:
       # mog-wam.exe (amd64) must be pre-built by CI before goreleaser runs.
-      # Build with: uv tool install pyinstaller && pyinstaller --onefile --name mog-wam scripts/wam/wam_auth.py
+      # Build with: uv tool run --python 3.12 --with "msal[broker]>=1.20,<2" pyinstaller --onefile --name mog-wam scripts/wam/wam_auth.py
       - src: dist/wam/mog-wam.exe
         strip_parent: true
 

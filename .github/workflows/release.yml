@@ -35,8 +35,7 @@ jobs:
 
       - name: Build mog-wam.exe
         run: |
-          uv tool install pyinstaller
-          pyinstaller --onefile --name mog-wam scripts/wam/wam_auth.py
+          uv tool run --python 3.12 --with "msal[broker]>=1.20,<2" pyinstaller --onefile --name mog-wam scripts/wam/wam_auth.py
 
       - name: Upload WAM artifact
         uses: actions/upload-artifact@v4

@@ -2,6 +2,7 @@ package config
 
 import (
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -54,6 +55,7 @@ func TestSafeExpandPathAllowsAbsolutePath(t *testing.T) {
 func TestSafeExpandPathExpandsTildeAndValidatesBase(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 
 	base := filepath.Join(home, "workspace")
 	got, err := SafeExpandPath(base, "~/notes.txt")
@@ -62,6 +64,28 @@ func TestSafeExpandPathExpandsTildeAndValidatesBase(t *testing.T) {
 	}
 
 	want := filepath.Join(home, "notes.txt")
+	if got != want {
+		t.Fatalf("unexpected expanded tilde path: got %q want %q", got, want)
+	}
+}
+
+func TestSafeExpandPathUsesPlatformHomeEnvForTilde(t *testing.T) {
+	root := t.TempDir()
+	home := filepath.Join(root, "home")
+	profile := filepath.Join(root, "profile")
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", profile)
+
+	got, err := SafeExpandPath(filepath.Join(root, "workspace"), "~/notes.txt")
+	if err != nil {
+		t.Fatalf("SafeExpandPath failed for tilde path: %v", err)
+	}
+
+	wantHome := home
+	if runtime.GOOS == "windows" {
+		wantHome = profile
+	}
+	want := filepath.Join(wantHome, "notes.txt")
 	if got != want {
 		t.Fatalf("unexpected expanded tilde path: got %q want %q", got, want)
 	}

@@ -4,7 +4,9 @@ opensrc/
 # build artifacts
 bin/
 dist/
+build/
 mog
+mog-wam.spec
 
 # secrets
 .env

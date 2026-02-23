@@ -1,6 +1,6 @@
 # /// script
 # requires-python = ">=3.10"
-# dependencies = ["msal>=1.28.0"]
+# dependencies = ["msal[broker]>=1.20,<2"]
 # ///
 """WAM (Web Account Manager) authentication helper for mogcli.
 

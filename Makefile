@@ -17,6 +17,7 @@ endif
 BIN_DIR := $(CURDIR)/bin
 ifeq ($(OS),Windows_NT)
 BIN := $(BIN_DIR)/mog.exe
+WAM_BIN := $(BIN_DIR)/mog-wam.exe
 else
 BIN := $(BIN_DIR)/mog
 endif
@@ -35,6 +36,7 @@ endif
 build:
 ifeq ($(OS),Windows_NT)
 	@if not exist "$(BIN_DIR)" mkdir "$(BIN_DIR)"
+	@if not exist "$(WAM_BIN)" "$(MAKE)" wam-build
 else
 	@mkdir -p $(BIN_DIR)
 endif
@@ -84,8 +86,9 @@ ci: fmt-check test
 
 wam-build:
 ifeq ($(OS),Windows_NT)
-	@uv tool install pyinstaller
-	@pyinstaller --onefile --name mog-wam --distpath $(BIN_DIR) scripts/wam/wam_auth.py
+	@if not exist "$(BIN_DIR)" mkdir "$(BIN_DIR)"
+	@uv --version >nul 2>&1 || (echo wam-build requires uv on PATH && exit /b 1)
+	@uv tool run --python 3.12 --with "msal[broker]>=1.20,<2" pyinstaller --onefile --name mog-wam --distpath $(BIN_DIR) scripts/wam/wam_auth.py
 else
 	@echo "wam-build: skipped (Windows-only target)"
 endif

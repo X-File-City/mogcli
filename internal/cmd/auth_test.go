@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -18,8 +19,35 @@ func setTempUserConfigEnv(t *testing.T) string {
 
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("APPDATA", filepath.Join(home, "AppData", "Roaming"))
+	t.Setenv("LOCALAPPDATA", filepath.Join(home, "AppData", "Local"))
 	return home
+}
+
+func TestSetTempUserConfigEnvIsolatesUserDirs(t *testing.T) {
+	home := setTempUserConfigEnv(t)
+
+	gotHome, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatalf("resolve user home dir: %v", err)
+	}
+	if gotHome != home {
+		t.Fatalf("unexpected user home dir: got %q want %q", gotHome, home)
+	}
+
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		t.Fatalf("resolve user config dir: %v", err)
+	}
+	rel, err := filepath.Rel(home, configDir)
+	if err != nil {
+		t.Fatalf("compute relative path: %v", err)
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		t.Fatalf("expected config dir under %q, got %q", home, configDir)
+	}
 }
 
 type fakeAuthManager struct {
