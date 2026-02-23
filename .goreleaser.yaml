@@ -34,7 +34,6 @@ builds:
       - GOFLAGS=-mod=vendor
     targets:
       - windows_amd64
-      - windows_arm64
   - id: mog_darwin
     main: ./cmd/mog
     binary: mog
@@ -65,7 +64,7 @@ archives:
     format: zip
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     files:
-      # mog-wam.exe must be pre-built by CI before goreleaser runs.
+      # mog-wam.exe (amd64) must be pre-built by CI before goreleaser runs.
       # Build with: uv tool install pyinstaller && pyinstaller --onefile --name mog-wam scripts/wam/wam_auth.py
       - src: dist/wam/mog-wam.exe
         strip_parent: true

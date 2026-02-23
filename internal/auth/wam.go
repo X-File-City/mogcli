@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 )
 
 // WAMRequest is the JSON payload sent to the mog-wam helper on stdin.
@@ -28,6 +29,9 @@ type WAMResponse struct {
 	Scope         string       `json:"scope"`
 	ExpiresIn     int          `json:"expires_in"`
 	IDToken       string       `json:"id_token"`
+	AccountID     string       `json:"account_id,omitempty"`
+	Username      string       `json:"username,omitempty"`
+	TenantID      string       `json:"tenant_id,omitempty"`
 	IDTokenClaims *WAMIDClaims `json:"id_token_claims,omitempty"`
 	Error         string       `json:"error,omitempty"`
 	ErrorDesc     string       `json:"error_description,omitempty"`
@@ -59,12 +63,16 @@ func findWAMExe() (string, error) {
 	}
 
 	wamPath := filepath.Join(filepath.Dir(self), wamExeName)
-	if _, err := os.Stat(wamPath); err != nil {
+	info, err := os.Stat(wamPath)
+	if err != nil {
 		return "", fmt.Errorf(
 			"WAM authentication helper not found at %s. "+
 				"Reinstall mogcli or use app-only mode for headless environments.",
 			wamPath,
 		)
+	}
+	if info.IsDir() {
+		return "", fmt.Errorf("WAM authentication helper path %s is a directory", wamPath)
 	}
 
 	return wamPath, nil
@@ -95,6 +103,9 @@ func invokeWAMExe(ctx context.Context, req WAMRequest) (WAMResponse, error) {
 		var resp WAMResponse
 		if jsonErr := json.Unmarshal(stdout.Bytes(), &resp); jsonErr == nil && resp.Error != "" {
 			return WAMResponse{}, fmt.Errorf("WAM authentication failed (%s): %s", resp.Error, resp.ErrorDesc)
+		}
+		if stderrText := strings.TrimSpace(stderr.String()); stderrText != "" {
+			return WAMResponse{}, fmt.Errorf("WAM helper process failed: %w: %s", err, stderrText)
 		}
 		return WAMResponse{}, fmt.Errorf("WAM helper process failed: %w", err)
 	}

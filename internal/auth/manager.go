@@ -162,28 +162,32 @@ func (m *Manager) loginDelegatedWAM(ctx context.Context, input DelegatedLoginInp
 	if err != nil {
 		return AccountInfo{}, err
 	}
+	if strings.TrimSpace(resp.AccessToken) == "" {
+		return AccountInfo{}, errors.New("WAM login response missing access_token")
+	}
+
+	expiresIn := resp.ExpiresIn
+	if expiresIn <= 0 {
+		expiresIn = 3600
+	}
+
+	account := accountFromWAMResponse(resp)
+	if strings.TrimSpace(account.AccountID) == "" && strings.TrimSpace(account.Username) == "" {
+		return AccountInfo{}, errors.New("WAM login response missing account identity")
+	}
 
 	cache := TokenCache{
 		AccessToken: resp.AccessToken,
 		TokenType:   resp.TokenType,
 		Scope:       resp.Scope,
-		ExpiresAt:   m.nowUTC().Add(time.Duration(resp.ExpiresIn) * time.Second),
+		ExpiresAt:   m.nowUTC().Add(time.Duration(expiresIn) * time.Second),
 		IDToken:     resp.IDToken,
 	}
 	if err := m.saveToken(input.ProfileName, cache); err != nil {
 		return AccountInfo{}, err
 	}
 
-	if resp.IDTokenClaims != nil {
-		return AccountInfo{
-			AccountID: firstNonEmpty(resp.IDTokenClaims.OID, resp.IDTokenClaims.Sub),
-			Username:  firstNonEmpty(resp.IDTokenClaims.PreferredUsername, resp.IDTokenClaims.Email, resp.IDTokenClaims.UPN),
-			TenantID:  resp.IDTokenClaims.TID,
-		}, nil
-	}
-
-	claims, _ := parseIDClaims(resp.IDToken)
-	return accountFromClaims(claims), nil
+	return account, nil
 }
 
 func (m *Manager) loginDelegatedDeviceCode(ctx context.Context, input DelegatedLoginInput, writeMessage func(string)) (AccountInfo, error) {
@@ -361,28 +365,71 @@ func (m *Manager) acquireDelegatedTokenWAM(
 	expectedTenantID string,
 ) (string, error) {
 	cache, _ := m.loadToken(profileName)
+	cachedAccount := accountFromWAMResponse(WAMResponse{IDToken: cache.IDToken})
+	requestAccountID := firstNonEmpty(expectedAccountID, cachedAccount.AccountID)
+	requestUsername := cachedAccount.Username
+	if requestAccountID == "" && requestUsername == "" {
+		return "", errfmt.NewUserFacingError(
+			fmt.Sprintf(
+				"cached delegated login for profile %s is missing account identity. Run `mog auth login --profile %s ...` to sign in again.",
+				profileName,
+				profileName,
+			),
+			nil,
+		)
+	}
 
 	resp, err := m.invokeWAM(ctx, WAMRequest{
 		Action:    "acquire_silent",
 		ClientID:  clientID,
 		Authority: normalizeAuthority(authority),
 		Scopes:    scopes,
-		AccountID: expectedAccountID,
-		Username:  "", // let WAM match by account_id
+		AccountID: requestAccountID,
+		Username:  requestUsername,
 	})
 	if err != nil {
 		return "", fmt.Errorf("WAM silent token acquisition failed: %w. Run `mog auth login` to sign in again", err)
+	}
+	if strings.TrimSpace(resp.AccessToken) == "" {
+		return "", errors.New("WAM silent token response missing access_token")
+	}
+	if requestAccountID != "" && strings.TrimSpace(resp.AccountID) != "" && !strings.EqualFold(requestAccountID, strings.TrimSpace(resp.AccountID)) {
+		return "", errfmt.NewUserFacingError(
+			fmt.Sprintf(
+				"WAM returned a different account for profile %s. Run `mog auth login --profile %s ...` to sign in again.",
+				profileName,
+				profileName,
+			),
+			nil,
+		)
+	}
+	if requestUsername != "" && strings.TrimSpace(resp.Username) != "" && !strings.EqualFold(requestUsername, strings.TrimSpace(resp.Username)) {
+		return "", errfmt.NewUserFacingError(
+			fmt.Sprintf(
+				"WAM returned a different user for profile %s. Run `mog auth login --profile %s ...` to sign in again.",
+				profileName,
+				profileName,
+			),
+			nil,
+		)
+	}
+	expiresIn := resp.ExpiresIn
+	if expiresIn <= 0 {
+		expiresIn = 3600
 	}
 
 	updated := TokenCache{
 		AccessToken: resp.AccessToken,
 		TokenType:   resp.TokenType,
 		Scope:       resp.Scope,
-		ExpiresAt:   m.nowUTC().Add(time.Duration(resp.ExpiresIn) * time.Second),
+		ExpiresAt:   m.nowUTC().Add(time.Duration(expiresIn) * time.Second),
 		IDToken:     resp.IDToken,
 	}
 	if updated.IDToken == "" {
 		updated.IDToken = cache.IDToken
+	}
+	if strings.TrimSpace(updated.Scope) == "" {
+		updated.Scope = cache.Scope
 	}
 
 	if err := m.validateCachedDelegatedIdentity(profileName, updated, expectedAccountID, expectedTenantID); err != nil {
@@ -749,6 +796,29 @@ func accountFromClaims(claims idClaims) AccountInfo {
 		Username:  username,
 		TenantID:  strings.TrimSpace(claims.TID),
 	}
+}
+
+func accountFromWAMResponse(resp WAMResponse) AccountInfo {
+	account := AccountInfo{
+		AccountID: strings.TrimSpace(resp.AccountID),
+		Username:  strings.TrimSpace(resp.Username),
+		TenantID:  strings.TrimSpace(resp.TenantID),
+	}
+	if resp.IDTokenClaims != nil {
+		account.AccountID = firstNonEmpty(account.AccountID, resp.IDTokenClaims.OID, resp.IDTokenClaims.Sub)
+		account.Username = firstNonEmpty(account.Username, resp.IDTokenClaims.PreferredUsername, resp.IDTokenClaims.Email, resp.IDTokenClaims.UPN)
+		account.TenantID = firstNonEmpty(account.TenantID, resp.IDTokenClaims.TID)
+	}
+	if strings.TrimSpace(resp.IDToken) != "" {
+		if claims, err := parseIDClaims(resp.IDToken); err == nil {
+			parsed := accountFromClaims(claims)
+			account.AccountID = firstNonEmpty(account.AccountID, parsed.AccountID)
+			account.Username = firstNonEmpty(account.Username, parsed.Username)
+			account.TenantID = firstNonEmpty(account.TenantID, parsed.TenantID)
+		}
+	}
+
+	return account
 }
 
 func firstNonEmpty(values ...string) string {

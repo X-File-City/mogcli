@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"path/filepath"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/jaredpalmer/mogcli/internal/errfmt"
 )
 
 func TestLoginDelegatedWAMSuccess(t *testing.T) {
@@ -120,6 +122,32 @@ func TestLoginDelegatedWAMFallsBackToIDTokenParsing(t *testing.T) {
 	}
 }
 
+func TestLoginDelegatedWAMRequiresIdentity(t *testing.T) {
+	setTempSecretsHome(t)
+
+	now := time.Date(2026, 2, 23, 12, 0, 0, 0, time.UTC)
+	manager := NewManager()
+	manager.now = func() time.Time { return now }
+	manager.WAMInvoker = func(_ context.Context, _ WAMRequest) (WAMResponse, error) {
+		return WAMResponse{
+			AccessToken: "wam-token",
+			TokenType:   "Bearer",
+			Scope:       "openid profile",
+			ExpiresIn:   3600,
+		}, nil
+	}
+
+	_, err := manager.loginDelegatedWAM(context.Background(), DelegatedLoginInput{
+		ProfileName: "test-profile",
+		ClientID:    "test-client",
+		Authority:   "organizations",
+		Scopes:      BaseDelegatedScopes,
+	}, nil)
+	if err == nil {
+		t.Fatal("expected missing identity error")
+	}
+}
+
 func TestAcquireDelegatedTokenWAMSilentSuccess(t *testing.T) {
 	setTempSecretsHome(t)
 
@@ -139,6 +167,7 @@ func TestAcquireDelegatedTokenWAMSilentSuccess(t *testing.T) {
 			Scope:       "Mail.Read Mail.Send",
 			ExpiresIn:   3600,
 			IDToken:     idTokenFor(t, "account-1", "tenant-1"),
+			AccountID:   "account-1",
 		}, nil
 	}
 
@@ -211,6 +240,90 @@ func TestAcquireDelegatedTokenWAMSilentFailure(t *testing.T) {
 	}
 }
 
+func TestAcquireDelegatedTokenWAMRejectsMismatchedAccount(t *testing.T) {
+	setTempSecretsHome(t)
+
+	now := time.Date(2026, 2, 23, 12, 0, 0, 0, time.UTC)
+	manager := NewManager()
+	manager.now = func() time.Time { return now }
+	manager.WAMInvoker = func(_ context.Context, _ WAMRequest) (WAMResponse, error) {
+		return WAMResponse{
+			AccessToken: "wam-refreshed-token",
+			TokenType:   "Bearer",
+			Scope:       "Mail.Read",
+			ExpiresIn:   3600,
+			AccountID:   "different-account",
+		}, nil
+	}
+
+	if err := manager.saveToken("work", TokenCache{
+		AccessToken: "expired-token",
+		Scope:       "Mail.Read",
+		ExpiresAt:   now.Add(-1 * time.Hour),
+		IDToken:     idTokenFor(t, "account-1", "tenant-1"),
+	}); err != nil {
+		t.Fatalf("saveToken failed: %v", err)
+	}
+
+	_, err := manager.acquireDelegatedTokenWAM(
+		context.Background(),
+		"work",
+		"client-id",
+		"organizations",
+		[]string{"Mail.Read"},
+		"account-1",
+		"tenant-1",
+	)
+	if err == nil {
+		t.Fatal("expected account mismatch error")
+	}
+	var userErr *errfmt.UserFacingError
+	if !errors.As(err, &userErr) {
+		t.Fatalf("expected UserFacingError, got %T", err)
+	}
+}
+
+func TestAcquireDelegatedTokenWAMRequiresRequestIdentity(t *testing.T) {
+	setTempSecretsHome(t)
+
+	now := time.Date(2026, 2, 23, 12, 0, 0, 0, time.UTC)
+	manager := NewManager()
+	manager.now = func() time.Time { return now }
+	manager.WAMInvoker = func(_ context.Context, req WAMRequest) (WAMResponse, error) {
+		t.Fatalf("unexpected WAM invocation with %+v", req)
+		return WAMResponse{}, nil
+	}
+
+	if err := manager.saveToken("work", TokenCache{
+		AccessToken: "expired-token",
+		Scope:       "Mail.Read",
+		ExpiresAt:   now.Add(-1 * time.Hour),
+		IDToken:     "",
+	}); err != nil {
+		t.Fatalf("saveToken failed: %v", err)
+	}
+
+	_, err := manager.acquireDelegatedTokenWAM(
+		context.Background(),
+		"work",
+		"client-id",
+		"organizations",
+		[]string{"Mail.Read"},
+		"",
+		"",
+	)
+	if err == nil {
+		t.Fatal("expected missing identity error")
+	}
+	var userErr *errfmt.UserFacingError
+	if !errors.As(err, &userErr) {
+		t.Fatalf("expected UserFacingError, got %T", err)
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "missing account identity") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestWAMRequestJSON(t *testing.T) {
 	req := WAMRequest{
 		Action:    "login",
@@ -247,6 +360,9 @@ func TestWAMResponseJSON(t *testing.T) {
 		"scope": "openid profile",
 		"expires_in": 3600,
 		"id_token": "idt",
+		"account_id": "o1",
+		"username": "user@test.com",
+		"tenant_id": "t1",
 		"id_token_claims": {
 			"oid": "o1",
 			"sub": "s1",
@@ -271,6 +387,15 @@ func TestWAMResponseJSON(t *testing.T) {
 	}
 	if resp.IDTokenClaims.PreferredUsername != "user@test.com" {
 		t.Fatalf("expected preferred_username user@test.com, got %s", resp.IDTokenClaims.PreferredUsername)
+	}
+	if resp.AccountID != "o1" {
+		t.Fatalf("expected account_id o1, got %s", resp.AccountID)
+	}
+	if resp.Username != "user@test.com" {
+		t.Fatalf("expected username user@test.com, got %s", resp.Username)
+	}
+	if resp.TenantID != "t1" {
+		t.Fatalf("expected tenant_id t1, got %s", resp.TenantID)
 	}
 }
 
@@ -309,12 +434,4 @@ func TestUseWAM(t *testing.T) {
 	// On Windows test runners, it should return true.
 	// We just verify it doesn't panic and returns a bool.
 	_ = useWAM()
-}
-
-// setTempSecretsHome is defined in manager_test.go.
-// idTokenFor is defined in manager_test.go.
-
-// Ensure the test helper uses a clean temp dir for secrets, same as manager_test.go.
-func init() {
-	_ = filepath.Join // ensure import is used
 }

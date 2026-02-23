@@ -54,6 +54,12 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Checkout release tag
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: git checkout "$RELEASE_TAG"
+
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
@@ -66,14 +72,16 @@ jobs:
           name: mog-wam
           path: dist/wam
 
+      - name: Verify WAM artifact
+        run: |
+          if [[ ! -f dist/wam/mog-wam.exe ]]; then
+            echo "missing dist/wam/mog-wam.exe" >&2
+            exit 1
+          fi
+          ls -lh dist/wam/mog-wam.exe
+
       - name: Stash GoReleaser config
         run: cp .goreleaser.yaml /tmp/.goreleaser.yaml
-
-      - name: Checkout release tag
-        if: ${{ github.event_name == 'workflow_dispatch' }}
-        env:
-          RELEASE_TAG: ${{ inputs.tag }}
-        run: git checkout "$RELEASE_TAG"
 
       - name: Validate Homebrew tap token
         env:
