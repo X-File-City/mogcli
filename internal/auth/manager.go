@@ -29,6 +29,10 @@ var (
 type Manager struct {
 	HTTPClient *http.Client
 	now        func() time.Time
+
+	// WAMInvoker overrides the WAM helper subprocess invocation. Used for testing.
+	// When nil, the default invokeWAMExe implementation is used.
+	WAMInvoker func(ctx context.Context, req WAMRequest) (WAMResponse, error)
 }
 
 // NewManager returns an auth manager with default HTTP/time providers.
@@ -37,6 +41,14 @@ func NewManager() *Manager {
 		HTTPClient: http.DefaultClient,
 		now:        time.Now,
 	}
+}
+
+func (m *Manager) invokeWAM(ctx context.Context, req WAMRequest) (WAMResponse, error) {
+	if m.WAMInvoker != nil {
+		return m.WAMInvoker(ctx, req)
+	}
+
+	return invokeWAMExe(ctx, req)
 }
 
 func (m *Manager) httpClient() *http.Client {
@@ -129,6 +141,52 @@ func (m *Manager) LoginDelegated(ctx context.Context, input DelegatedLoginInput,
 		input.Scopes = BaseDelegatedScopes
 	}
 
+	if useWAM() {
+		return m.loginDelegatedWAM(ctx, input, writeMessage)
+	}
+
+	return m.loginDelegatedDeviceCode(ctx, input, writeMessage)
+}
+
+func (m *Manager) loginDelegatedWAM(ctx context.Context, input DelegatedLoginInput, writeMessage func(string)) (AccountInfo, error) {
+	if writeMessage != nil {
+		writeMessage("Authenticating via Windows account...")
+	}
+
+	resp, err := m.invokeWAM(ctx, WAMRequest{
+		Action:    "login",
+		ClientID:  input.ClientID,
+		Authority: normalizeAuthority(input.Authority),
+		Scopes:    input.Scopes,
+	})
+	if err != nil {
+		return AccountInfo{}, err
+	}
+
+	cache := TokenCache{
+		AccessToken: resp.AccessToken,
+		TokenType:   resp.TokenType,
+		Scope:       resp.Scope,
+		ExpiresAt:   m.nowUTC().Add(time.Duration(resp.ExpiresIn) * time.Second),
+		IDToken:     resp.IDToken,
+	}
+	if err := m.saveToken(input.ProfileName, cache); err != nil {
+		return AccountInfo{}, err
+	}
+
+	if resp.IDTokenClaims != nil {
+		return AccountInfo{
+			AccountID: firstNonEmpty(resp.IDTokenClaims.OID, resp.IDTokenClaims.Sub),
+			Username:  firstNonEmpty(resp.IDTokenClaims.PreferredUsername, resp.IDTokenClaims.Email, resp.IDTokenClaims.UPN),
+			TenantID:  resp.IDTokenClaims.TID,
+		}, nil
+	}
+
+	claims, _ := parseIDClaims(resp.IDToken)
+	return accountFromClaims(claims), nil
+}
+
+func (m *Manager) loginDelegatedDeviceCode(ctx context.Context, input DelegatedLoginInput, writeMessage func(string)) (AccountInfo, error) {
 	deviceReq := url.Values{}
 	deviceReq.Set("client_id", input.ClientID)
 	deviceReq.Set("scope", strings.Join(input.Scopes, " "))
@@ -286,6 +344,68 @@ func (m *Manager) AcquireDelegatedToken(
 		return cache.AccessToken, nil
 	}
 
+	if useWAM() {
+		return m.acquireDelegatedTokenWAM(ctx, profileName, clientID, authority, requiredScopes, expectedAccountID, expectedTenantID)
+	}
+
+	return m.acquireDelegatedTokenRefresh(ctx, profileName, clientID, authority, requiredScopes, cache, expectedAccountID, expectedTenantID)
+}
+
+func (m *Manager) acquireDelegatedTokenWAM(
+	ctx context.Context,
+	profileName string,
+	clientID string,
+	authority string,
+	scopes []string,
+	expectedAccountID string,
+	expectedTenantID string,
+) (string, error) {
+	cache, _ := m.loadToken(profileName)
+
+	resp, err := m.invokeWAM(ctx, WAMRequest{
+		Action:    "acquire_silent",
+		ClientID:  clientID,
+		Authority: normalizeAuthority(authority),
+		Scopes:    scopes,
+		AccountID: expectedAccountID,
+		Username:  "", // let WAM match by account_id
+	})
+	if err != nil {
+		return "", fmt.Errorf("WAM silent token acquisition failed: %w. Run `mog auth login` to sign in again", err)
+	}
+
+	updated := TokenCache{
+		AccessToken: resp.AccessToken,
+		TokenType:   resp.TokenType,
+		Scope:       resp.Scope,
+		ExpiresAt:   m.nowUTC().Add(time.Duration(resp.ExpiresIn) * time.Second),
+		IDToken:     resp.IDToken,
+	}
+	if updated.IDToken == "" {
+		updated.IDToken = cache.IDToken
+	}
+
+	if err := m.validateCachedDelegatedIdentity(profileName, updated, expectedAccountID, expectedTenantID); err != nil {
+		return "", err
+	}
+
+	if err := m.saveToken(profileName, updated); err != nil {
+		return "", err
+	}
+
+	return updated.AccessToken, nil
+}
+
+func (m *Manager) acquireDelegatedTokenRefresh(
+	ctx context.Context,
+	profileName string,
+	clientID string,
+	authority string,
+	scopes []string,
+	cache TokenCache,
+	expectedAccountID string,
+	expectedTenantID string,
+) (string, error) {
 	if strings.TrimSpace(cache.RefreshToken) == "" {
 		return "", ErrMissingRefreshToken
 	}
@@ -294,7 +414,7 @@ func (m *Manager) AcquireDelegatedToken(
 	req.Set("grant_type", "refresh_token")
 	req.Set("client_id", clientID)
 	req.Set("refresh_token", cache.RefreshToken)
-	req.Set("scope", strings.Join(requiredScopes, " "))
+	req.Set("scope", strings.Join(scopes, " "))
 
 	body, status, err := m.doFormWithStatus(ctx, endpoint(authority, "/oauth2/v2.0/token"), req)
 	if err != nil {
@@ -629,6 +749,16 @@ func accountFromClaims(claims idClaims) AccountInfo {
 		Username:  username,
 		TenantID:  strings.TrimSpace(claims.TID),
 	}
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if s := strings.TrimSpace(v); s != "" {
+			return s
+		}
+	}
+
+	return ""
 }
 
 func (m *Manager) doForm(ctx context.Context, endpoint string, form url.Values) ([]byte, error) {

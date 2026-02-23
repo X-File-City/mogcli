@@ -12,7 +12,7 @@ DATE = $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 endif
 .DEFAULT_GOAL := build
 
-.PHONY: build mog mog-help help fmt fmt-check test ci vendor
+.PHONY: build mog mog-help help fmt fmt-check test ci vendor wam-build
 
 BIN_DIR := $(CURDIR)/bin
 ifeq ($(OS),Windows_NT)
@@ -81,3 +81,11 @@ vendor:
 	@$(GO) mod vendor
 
 ci: fmt-check test
+
+wam-build:
+ifeq ($(OS),Windows_NT)
+	@uv tool install pyinstaller
+	@pyinstaller --onefile --name mog-wam --distpath $(BIN_DIR) scripts/wam/wam_auth.py
+else
+	@echo "wam-build: skipped (Windows-only target)"
+endif

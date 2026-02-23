@@ -159,9 +159,10 @@ Phase-2 additions:
 ### 4.3 Authority rules
 
 1. `/common`, `/organizations`, `/consumers` authority behavior follows Microsoft identity platform guidance [MS1].
-2. Device code flow is default for CLI interaction [MS2].
+2. On Windows, delegated login uses WAM (Web Account Manager) via a bundled `mog-wam.exe` helper (MSAL Python + PyInstaller). On macOS/Linux, device code flow is used.
 3. Consumer profile must use consumer-compatible authority and client registration.
 4. Enterprise app-only only enabled for enterprise profiles (phase 2).
+5. Token refresh on Windows uses WAM silent acquire (OS-level session). On macOS/Linux, refresh uses HTTP refresh_token grant.
 
 ## 5. Workload matrix (commands, Graph endpoints, scopes, constraints)
 
