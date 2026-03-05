@@ -1,19 +1,19 @@
 {
   "id": "mogcli-intro",
-  "title": "mogcli - Microsoft 365 cli",
-  "description": "A guided tour of mogcli, an agent-friendly Microsoft Graph cli for Mail, Calendar, Contacts, Groups, Tasks, and OneDrive.",
+  "title": "mogcli - Microsoft 365 CLI",
+  "description": "A guided tour of mogcli, an agent-friendly Microsoft Graph CLI for Mail, Calendar, Contacts, Groups, Tasks, and OneDrive.",
   "version": "1.0.0",
   "steps": [
     {
       "id": "overview",
       "title": "Project Overview",
-      "description": "mogcli is a Go cli that wraps the Microsoft Graph api, providing scriptable commands for personal (MSA) and enterprise (Entra ID) Microsoft 365 accounts. The entrypoint is in cmd/mog, internal packages handle all business logic, and vendor contains Go dependencies.",
+      "description": "mogcli is a Go CLI that wraps the Microsoft Graph api, providing scriptable commands for personal (MSA) and enterprise (Entra ID) Microsoft 365 accounts. The entrypoint is in cmd/mog, internal packages handle all business logic, and vendor contains Go dependencies.",
       "colorMode": "fileTypes"
     },
     {
       "id": "entrypoint",
       "title": "Entrypoint",
-      "description": "cmd/mog/main.go is the single entrypoint. It wires up the Kong cli framework and delegates to the command handlers in internal/cmd. The build pipeline is defined in .goreleaser.yaml for cross-platform releases.",
+      "description": "cmd/mog/main.go is the single entrypoint. It wires up the Kong CLI framework and delegates to the command handlers in internal/cmd. The build pipeline is defined in .goreleaser.yaml for cross-platform releases.",
       "focusDirectory": "cmd",
       "highlightLayers": [
         {
@@ -53,7 +53,7 @@
         },
         {
           "id": "infrastructure",
-          "name": "cli Infrastructure",
+          "name": "CLI Infrastructure",
           "color": "#a855f7",
           "items": [
             { "path": "internal/cmd/context.go", "type": "file" },
@@ -134,7 +134,7 @@
     {
       "id": "supporting-packages",
       "title": "Supporting Packages",
-      "description": "Several internal packages support the cli: config manages profiles and settings, profile handles multi-account storage, secrets provides OS keychain integration, input handles interactive prompts, outfmt formats output, errfmt standardizes error messages, and ui provides terminal rendering.",
+      "description": "Several internal packages support the CLI: config manages profiles and settings, profile handles multi-account storage, secrets provides OS keychain integration, input handles interactive prompts, outfmt formats output, errfmt standardizes error messages, and ui provides terminal rendering.",
       "focusDirectory": "internal",
       "highlightLayers": [
         {
