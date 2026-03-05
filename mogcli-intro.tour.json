@@ -1,0 +1,175 @@
+{
+  "id": "mogcli-intro",
+  "title": "mogcli - Microsoft 365 CLI",
+  "description": "A guided tour of mogcli, an agent-friendly Microsoft Graph CLI for Mail, Calendar, Contacts, Groups, Tasks, and OneDrive.",
+  "version": "1.0.0",
+  "steps": [
+    {
+      "id": "overview",
+      "title": "Project Overview",
+      "description": "mogcli is a Go CLI that wraps the Microsoft Graph API, providing scriptable commands for personal (MSA) and enterprise (Entra ID) Microsoft 365 accounts. The entrypoint is in cmd/mog, internal packages handle all business logic, and vendor contains Go dependencies.",
+      "colorMode": "fileTypes"
+    },
+    {
+      "id": "entrypoint",
+      "title": "CLI Entrypoint",
+      "description": "cmd/mog/main.go is the single entrypoint. It wires up the Kong CLI framework and delegates to the command handlers in internal/cmd. The build pipeline is defined in .goreleaser.yaml for cross-platform releases.",
+      "focusDirectory": "cmd",
+      "highlightLayers": [
+        {
+          "id": "entrypoint-files",
+          "name": "Entrypoint",
+          "color": "#3b82f6",
+          "items": [
+            { "path": "cmd/mog/main.go", "type": "file" }
+          ],
+          "opacity": 0.7,
+          "renderStrategy": "border"
+        }
+      ]
+    },
+    {
+      "id": "commands",
+      "title": "Command Layer",
+      "description": "internal/cmd holds all CLI command definitions: auth, mail, calendar, contacts, groups, tasks, onedrive, config, and completion. Each file maps to a top-level mog subcommand. root.go wires them together using the Kong CLI framework, and context.go provides shared runtime state.",
+      "focusDirectory": "internal/cmd",
+      "highlightLayers": [
+        {
+          "id": "core-commands",
+          "name": "Core Commands",
+          "color": "#22c55e",
+          "items": [
+            { "path": "internal/cmd/root.go", "type": "file" },
+            { "path": "internal/cmd/auth.go", "type": "file" },
+            { "path": "internal/cmd/mail.go", "type": "file" },
+            { "path": "internal/cmd/calendar.go", "type": "file" },
+            { "path": "internal/cmd/contacts.go", "type": "file" },
+            { "path": "internal/cmd/tasks.go", "type": "file" },
+            { "path": "internal/cmd/onedrive.go", "type": "file" },
+            { "path": "internal/cmd/groups.go", "type": "file" }
+          ],
+          "opacity": 0.7,
+          "renderStrategy": "border"
+        },
+        {
+          "id": "infrastructure",
+          "name": "CLI Infrastructure",
+          "color": "#a855f7",
+          "items": [
+            { "path": "internal/cmd/context.go", "type": "file" },
+            { "path": "internal/cmd/output.go", "type": "file" },
+            { "path": "internal/cmd/pagination.go", "type": "file" },
+            { "path": "internal/cmd/flags_output.go", "type": "file" }
+          ],
+          "opacity": 0.7,
+          "renderStrategy": "border"
+        }
+      ]
+    },
+    {
+      "id": "auth-system",
+      "title": "Authentication System",
+      "description": "internal/auth manages OAuth2 flows: device-code login for delegated access and client-credentials for app-only enterprise access. It supports WAM (Web Account Manager) on Windows, progressive consent with per-command scopes, and multi-profile token management. Secrets are stored via OS keychain backends in internal/secrets.",
+      "focusDirectory": "internal/auth",
+      "highlightLayers": [
+        {
+          "id": "auth-core",
+          "name": "Auth Core",
+          "color": "#ef4444",
+          "items": [
+            { "path": "internal/auth/manager.go", "type": "file" },
+            { "path": "internal/auth/types.go", "type": "file" },
+            { "path": "internal/auth/scopes.go", "type": "file" },
+            { "path": "internal/auth/wam.go", "type": "file" }
+          ],
+          "opacity": 0.7,
+          "renderStrategy": "border"
+        }
+      ]
+    },
+    {
+      "id": "services",
+      "title": "Service Layer",
+      "description": "internal/services contains the domain logic for each Microsoft 365 workload: calendar, contacts, groups, mail, onedrive, and tasks. Each service wraps Microsoft Graph API calls, handles response parsing, and provides a clean interface consumed by the command layer.",
+      "focusDirectory": "internal/services",
+      "highlightLayers": [
+        {
+          "id": "services-list",
+          "name": "Workload Services",
+          "color": "#f59e0b",
+          "items": [
+            { "path": "internal/services/mail", "type": "directory" },
+            { "path": "internal/services/calendar", "type": "directory" },
+            { "path": "internal/services/contacts", "type": "directory" },
+            { "path": "internal/services/groups", "type": "directory" },
+            { "path": "internal/services/tasks", "type": "directory" },
+            { "path": "internal/services/onedrive", "type": "directory" }
+          ],
+          "opacity": 0.7,
+          "renderStrategy": "border"
+        }
+      ]
+    },
+    {
+      "id": "graph-client",
+      "title": "Graph API Client",
+      "description": "internal/graph is the HTTP client layer for Microsoft Graph. It handles authentication headers, OData query parameters, retry logic with circuit breakers, and structured error handling. This is the foundation that all services build on.",
+      "focusDirectory": "internal/graph",
+      "highlightLayers": [
+        {
+          "id": "graph-files",
+          "name": "Graph Client",
+          "color": "#06b6d4",
+          "items": [
+            { "path": "internal/graph/client.go", "type": "file" },
+            { "path": "internal/graph/circuitbreaker.go", "type": "file" },
+            { "path": "internal/graph/odata.go", "type": "file" },
+            { "path": "internal/graph/errors.go", "type": "file" }
+          ],
+          "opacity": 0.7,
+          "renderStrategy": "border"
+        }
+      ]
+    },
+    {
+      "id": "supporting-packages",
+      "title": "Supporting Packages",
+      "description": "Several internal packages support the CLI: config manages profiles and settings, profile handles multi-account storage, secrets provides OS keychain integration, input handles interactive prompts, outfmt formats output, errfmt standardizes error messages, and ui provides terminal rendering.",
+      "focusDirectory": "internal",
+      "highlightLayers": [
+        {
+          "id": "config-storage",
+          "name": "Config & Storage",
+          "color": "#8b5cf6",
+          "items": [
+            { "path": "internal/config", "type": "directory" },
+            { "path": "internal/profile", "type": "directory" },
+            { "path": "internal/secrets", "type": "directory" }
+          ],
+          "opacity": 0.7,
+          "renderStrategy": "border"
+        },
+        {
+          "id": "io-formatting",
+          "name": "I/O & Formatting",
+          "color": "#ec4899",
+          "items": [
+            { "path": "internal/input", "type": "directory" },
+            { "path": "internal/outfmt", "type": "directory" },
+            { "path": "internal/errfmt", "type": "directory" },
+            { "path": "internal/ui", "type": "directory" }
+          ],
+          "opacity": 0.7,
+          "renderStrategy": "border"
+        }
+      ]
+    },
+    {
+      "id": "architecture-summary",
+      "title": "Architecture Summary",
+      "description": "mogcli follows a clean layered architecture: cmd/mog (entrypoint) -> internal/cmd (CLI commands) -> internal/services (domain logic) -> internal/graph (HTTP client). Auth, config, secrets, and formatting are cross-cutting concerns used throughout. The codebase is fully vendored with Go modules.",
+      "focusDirectory": "",
+      "colorMode": "fileTypes"
+    }
+  ]
+}
