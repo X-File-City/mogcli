@@ -1,6 +1,6 @@
 {
   "id": "mogcli-intro",
-  "title": "mogcli - Microsoft 365 CLI",
+  "title": "mogcli - a Microsoft 365 CLI",
   "description": "A guided tour of mogcli, an agent-friendly Microsoft Graph CLI for Mail, Calendar, Contacts, Groups, Tasks, and OneDrive.",
   "version": "1.0.0",
   "steps": [
