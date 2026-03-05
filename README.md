@@ -1,6 +1,6 @@
 # mogcli
 
-Microsoft 365 in your terminal.
+Unofficial agent-friendly Microsoft 365 CLI
 
 `mogcli` is a Microsoft Graph CLI for personal Microsoft accounts (MSA) and enterprise Microsoft Entra ID accounts. It provides scriptable commands for Mail, Calendar, Contacts, Groups, Tasks, and OneDrive.
 
