@@ -1,13 +1,13 @@
 {
   "id": "mogcli-intro",
-  "title": "mogcli - a Microsoft 365 C L I",
-  "description": "A guided tour of mogcli, an agent-friendly Microsoft Graph C L I for Mail, Calendar, Contacts, Groups, Tasks, and OneDrive.",
+  "title": "mogcli - a Microsoft 365 CL i",
+  "description": "A guided tour of mogcli, an agent-friendly Microsoft Graph CL i for Mail, Calendar, Contacts, Groups, Tasks, and OneDrive.",
   "version": "1.0.0",
   "steps": [
     {
       "id": "overview",
       "title": "Project Overview",
-      "description": "mogcli is a Go C L I that wraps the Microsoft Graph api, providing scriptable commands for personal (MSA) and enterprise (Entra ID) Microsoft 365 accounts. The entrypoint is in cmd/mog, internal packages handle all business logic, and vendor contains Go dependencies.",
+      "description": "mogcli is a Go CL i that wraps the Microsoft Graph api, providing scriptable commands for personal (MSA) and enterprise (Entra ID) Microsoft 365 accounts. The entrypoint is in cmd/mog, internal packages handle all business logic, and vendor contains Go dependencies.",
       "colorMode": "fileTypes"
     },
     {
