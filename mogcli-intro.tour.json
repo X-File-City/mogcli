@@ -1,13 +1,13 @@
 {
   "id": "mogcli-intro",
   "title": "mogcli - Microsoft 365 Command Line Tool",
-  "description": "A guided tour of mogcli, an agent-friendly Microsoft Graph command line tool for Mail, Calendar, Contacts, Groups, Tasks, and OneDrive.",
+  "description": "A guided tour of mogcli, an agent-friendly command line tool for Microsoft Graph. It covers Mail, Calendar, Contacts, Groups, Tasks, and OneDrive.",
   "version": "1.0.0",
   "steps": [
     {
       "id": "overview",
       "title": "Project Overview",
-      "description": "mogcli is a Go command line tool that wraps the Microsoft Graph API, providing scriptable commands for personal (MSA) and enterprise (Entra ID) Microsoft 365 accounts. The entrypoint is in cmd/mog, internal packages handle all business logic, and vendor contains Go dependencies.",
+      "description": "mogcli is a Go command line tool that wraps the Microsoft Graph interface, providing scriptable commands for personal (MSA) and enterprise (Entra ID) Microsoft 365 accounts. The entrypoint is in cmd/mog, internal packages handle all business logic, and vendor contains Go dependencies.",
       "colorMode": "fileTypes"
     },
     {
@@ -90,7 +90,7 @@
     {
       "id": "services",
       "title": "Service Layer",
-      "description": "internal/services contains the domain logic for each Microsoft 365 workload: calendar, contacts, groups, mail, onedrive, and tasks. Each service wraps Microsoft Graph API calls, handles response parsing, and provides a clean interface consumed by the command layer.",
+      "description": "internal/services contains the domain logic for each Microsoft 365 workload: calendar, contacts, groups, mail, onedrive, and tasks. Each service wraps Microsoft Graph calls, handles response parsing, and provides a clean interface consumed by the command layer.",
       "focusDirectory": "internal/services",
       "highlightLayers": [
         {
@@ -112,7 +112,7 @@
     },
     {
       "id": "graph-client",
-      "title": "Graph API Client",
+      "title": "Graph Client",
       "description": "internal/graph is the HTTP client layer for Microsoft Graph. It handles authentication headers, OData query parameters, retry logic with circuit breakers, and structured error handling. This is the foundation that all services build on.",
       "focusDirectory": "internal/graph",
       "highlightLayers": [
@@ -167,7 +167,7 @@
     {
       "id": "architecture-summary",
       "title": "Architecture Summary",
-      "description": "mogcli follows a clean layered architecture: cmd/mog (entrypoint) -> internal/cmd (CLI commands) -> internal/services (domain logic) -> internal/graph (HTTP client). Auth, config, secrets, and formatting are cross-cutting concerns used throughout. The codebase is fully vendored with Go modules.",
+      "description": "mogcli follows a clean layered architecture: cmd/mog (entrypoint) -> internal/cmd (commands) -> internal/services (domain logic) -> internal/graph (HTTP client). Auth, config, secrets, and formatting are cross-cutting concerns used throughout. The codebase is fully vendored with Go modules.",
       "focusDirectory": "",
       "colorMode": "fileTypes"
     }
