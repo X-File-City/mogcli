@@ -1,19 +1,19 @@
 {
   "id": "mogcli-intro",
-  "title": "mogcli - Microsoft 365 CLI",
-  "description": "A guided tour of mogcli, an agent-friendly Microsoft Graph CLI for Mail, Calendar, Contacts, Groups, Tasks, and OneDrive.",
+  "title": "mogcli - Microsoft 365 Command Line Tool",
+  "description": "A guided tour of mogcli, an agent-friendly Microsoft Graph command line tool for Mail, Calendar, Contacts, Groups, Tasks, and OneDrive.",
   "version": "1.0.0",
   "steps": [
     {
       "id": "overview",
       "title": "Project Overview",
-      "description": "mogcli is a Go CLI that wraps the Microsoft Graph API, providing scriptable commands for personal (MSA) and enterprise (Entra ID) Microsoft 365 accounts. The entrypoint is in cmd/mog, internal packages handle all business logic, and vendor contains Go dependencies.",
+      "description": "mogcli is a Go command line tool that wraps the Microsoft Graph API, providing scriptable commands for personal (MSA) and enterprise (Entra ID) Microsoft 365 accounts. The entrypoint is in cmd/mog, internal packages handle all business logic, and vendor contains Go dependencies.",
       "colorMode": "fileTypes"
     },
     {
       "id": "entrypoint",
-      "title": "CLI Entrypoint",
-      "description": "cmd/mog/main.go is the single entrypoint. It wires up the Kong CLI framework and delegates to the command handlers in internal/cmd. The build pipeline is defined in .goreleaser.yaml for cross-platform releases.",
+      "title": "Entrypoint",
+      "description": "cmd/mog/main.go is the single entrypoint. It wires up the Kong command line framework and delegates to the command handlers in internal/cmd. The build pipeline is defined in .goreleaser.yaml for cross-platform releases.",
       "focusDirectory": "cmd",
       "highlightLayers": [
         {
@@ -31,7 +31,7 @@
     {
       "id": "commands",
       "title": "Command Layer",
-      "description": "internal/cmd holds all CLI command definitions: auth, mail, calendar, contacts, groups, tasks, onedrive, config, and completion. Each file maps to a top-level mog subcommand. root.go wires them together using the Kong CLI framework, and context.go provides shared runtime state.",
+      "description": "internal/cmd holds all command definitions: auth, mail, calendar, contacts, groups, tasks, onedrive, config, and completion. Each file maps to a top-level mog subcommand. root.go wires them together using the Kong framework, and context.go provides shared runtime state.",
       "focusDirectory": "internal/cmd",
       "highlightLayers": [
         {
@@ -53,7 +53,7 @@
         },
         {
           "id": "infrastructure",
-          "name": "CLI Infrastructure",
+          "name": "Command Infrastructure",
           "color": "#a855f7",
           "items": [
             { "path": "internal/cmd/context.go", "type": "file" },
@@ -134,7 +134,7 @@
     {
       "id": "supporting-packages",
       "title": "Supporting Packages",
-      "description": "Several internal packages support the CLI: config manages profiles and settings, profile handles multi-account storage, secrets provides OS keychain integration, input handles interactive prompts, outfmt formats output, errfmt standardizes error messages, and ui provides terminal rendering.",
+      "description": "Several internal packages support the tool: config manages profiles and settings, profile handles multi-account storage, secrets provides OS keychain integration, input handles interactive prompts, outfmt formats output, errfmt standardizes error messages, and ui provides terminal rendering.",
       "focusDirectory": "internal",
       "highlightLayers": [
         {
